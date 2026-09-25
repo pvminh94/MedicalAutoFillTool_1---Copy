@@ -230,8 +230,8 @@ public class HomeController : Controller
                 {
                     FormProfileId = isNew ? 0 : form.Id,
                     ExcelIndex = f.ExcelIndex,
-                    Labels = JoinList(f.Labels),
-                    HeaderNames = JoinList(f.HeaderNames),
+                    Labels = NormalizeJoined(f.Labels),
+                    HeaderNames = NormalizeJoined(f.HeaderNames),
                     Selector = f.Selector,
                     ControlType = f.ControlType,
                     Required = f.Required,
@@ -490,10 +490,17 @@ public class HomeController : Controller
             ? new List<string>()
             : s.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-    private static string? JoinList(List<string>? items) =>
-        items == null || items.Count == 0
-            ? null
-            : string.Join(";", items.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()));
+    /// <summary>
+    /// Client gửi nhãn/tên cột dưới dạng MỘT chuỗi "a;b;c" (đúng như ô nhập trong
+    /// trang cấu hình). Chuẩn hoá lại: bỏ phần tử rỗng, trim, nối bằng ";" không khoảng
+    /// trắng — để SplitList() đọc ngược lại luôn khớp và CSDL không chứa rác.
+    /// </summary>
+    private static string? NormalizeJoined(string? joined)
+    {
+        if (string.IsNullOrWhiteSpace(joined)) return null;
+        var parts = joined.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length == 0 ? null : string.Join(";", parts);
+    }
 }
 
 // ---------------------------------------------------------------------- DTO

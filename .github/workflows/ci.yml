@@ -1,9 +1,13 @@
 name: CI
 
-# Vì sao cần: repo này là WinForms + WebView2, chỉ build được trên Windows, còn người
+# Vì sao cần: repo này là WinForms + WebView2, thường chỉ build trên Windows, còn người
 # bảo trì có thể làm việc trên Linux/macOS. Workflow này biên dịch THẬT cả 3 project .NET
 # (nhờ <EnableWindowsTargeting>true</EnableWindowsTargeting>) và chạy bộ test engine,
 # nên lỗi cú pháp/sai API C# bị bắt ngay khi push thay vì lúc chạy ở bệnh viện.
+#
+# Các bước build đặt continue-on-error để MỘT lần push lộ ra hết lỗi của cả 3 project
+# (nếu dừng ở project đầu thì phải push 3 vòng mới thấy hết lỗi), rồi bước cuối
+# mới tổng hợp và làm fail job.
 
 on:
   push:
@@ -44,20 +48,30 @@ jobs:
             9.0.x
 
       - name: Build bản Web (net9.0)
+        id: buildWeb
+        continue-on-error: true
         run: dotnet build MedicalAutoFillWeb/MedicalAutoFillWeb.csproj -c Release --nologo -v minimal
 
       - name: Build MedinetBridge (net9.0-windows)
+        id: buildBridge
+        continue-on-error: true
         run: dotnet build MedinetBridge/MedinetBridge.csproj -c Release --nologo -v minimal
 
       - name: Build bản WinForms (net8.0-windows)
+        id: buildWinForms
+        continue-on-error: true
         run: dotnet build MedicalAutoFillTool.csproj -c Release --nologo -v minimal
 
       - name: Publish thử bản WinForms ra 1 file .exe
+        id: publishWinForms
+        continue-on-error: true
         run: >
           dotnet publish MedicalAutoFillTool.csproj -c Release -r win-x64 --self-contained
           -p:PublishSingleFile=true -o /tmp/maf-publish --nologo -v minimal
 
       - name: Kiểm tra .exe có nhúng engine không
+        id: checkExe
+        continue-on-error: true
         run: |
           ls -la /tmp/maf-publish/*.exe
           if strings /tmp/maf-publish/*.exe | grep -q "maf-engine.js"; then
@@ -66,3 +80,32 @@ jobs:
             echo "LỖI: không thấy maf-engine.js trong .exe — kiểm tra EmbeddedResource trong csproj"
             exit 1
           fi
+
+      - name: Tổng hợp kết quả
+        if: always()
+        run: |
+          WEB="${{ steps.buildWeb.outcome }}"
+          BRIDGE="${{ steps.buildBridge.outcome }}"
+          WINFORMS="${{ steps.buildWinForms.outcome }}"
+          PUBLISH="${{ steps.publishWinForms.outcome }}"
+          EXE="${{ steps.checkExe.outcome }}"
+
+          {
+            echo "| Bước | Kết quả |"
+            echo "|---|---|"
+            echo "| Build Web (net9.0) | $WEB |"
+            echo "| Build MedinetBridge (net9.0-windows) | $BRIDGE |"
+            echo "| Build WinForms (net8.0-windows) | $WINFORMS |"
+            echo "| Publish 1 file .exe | $PUBLISH |"
+            echo "| Engine có được nhúng vào .exe | $EXE |"
+          } >> $GITHUB_STEP_SUMMARY
+
+          fail=0
+          for o in "$WEB" "$BRIDGE" "$WINFORMS" "$PUBLISH" "$EXE"; do
+            [ "$o" = "success" ] || fail=1
+          done
+          if [ "$fail" = "1" ]; then
+            echo "::error::Ít nhất một project .NET không biên dịch được — xem annotation của từng bước build."
+            exit 1
+          fi
+          echo "✅ Tất cả project .NET biên dịch thành công."

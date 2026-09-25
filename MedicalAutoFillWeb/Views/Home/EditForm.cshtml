@@ -8,8 +8,6 @@
     BẢN CŨ CỦA TRANG NÀY KHÔNG BIÊN DỊCH ĐƯỢC:
       - @model FormProfile nhưng controller không truyền Model  -> NullReferenceException
       - dùng Model.UrlContains, thuộc tính KHÔNG TỒN TẠI trong FormProfile -> CS1061
-      - <option selected="@bool"> -> Razor in ra selected="True", HTML coi là selected
-        với MỌI giá trị => cả 2 option đều được chọn
       - form method=post tới /Home/SaveForm nhưng action đó nhận [FromBody] JSON
     Trang này được viết lại: đọc/ghi JSON, không phụ thuộc model binding.
 *@
@@ -29,8 +27,11 @@
             <select id="formPicker" style="min-width:340px">
                 @foreach (var f in allForms)
                 {
-                    var sel = current != null && current.Id == f.Id ? " selected" : "";
-                    <option value="@f.Id"@sel>@(string.IsNullOrEmpty(f.DisplayName) ? f.Name : f.DisplayName) — @f.Fields.Count trường</option>
+                    // Razor conditional attribute: giá trị bool true thì in ra
+                    // selected, false thì bỏ hẳn thuộc tính. Không được nối chuỗi C#
+                    // vào vùng khai báo thuộc tính vì tag helper option sẽ báo lỗi.
+                    var isSelected = current != null && current.Id == f.Id;
+                    <option value="@f.Id" selected="@isSelected">@(string.IsNullOrEmpty(f.DisplayName) ? f.Name : f.DisplayName) — @f.Fields.Count trường</option>
                 }
                 <option value="new">+ Tạo form mới…</option>
             </select>
