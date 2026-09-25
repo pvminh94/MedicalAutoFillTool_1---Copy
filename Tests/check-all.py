@@ -267,6 +267,56 @@ def check_selftest():
     return True
 
 
+# ------------------------------------------------------------------ 9. glob nuốt project con
+def check_root_glob():
+    """Project Ở THƯ MỤC GỐC có glob **\*.cs nuốt source của các project con không?
+
+    Lỗi thật của repo này: MedicalAutoFillTool.csproj nằm ở gốc, còn
+    MedicalAutoFillWeb/ và MedinetBridge/ là thư mục con. SDK glob "**\*.cs" nên
+    project gốc biên dịch LUÔN cả Program.cs của Bridge (trùng [STAThread] Main)
+    và Controllers của Web (thiếu Microsoft.AspNetCore -> CS0246 'HttpGet'),
+    cùng các file *.AssemblyInfo.cs trong obj/ của chúng (trùng attribute).
+    Kết quả: `dotnet build` ở thư mục gốc không bao giờ thành công.
+    """
+    global CHECKS
+    CHECKS += 1
+
+    root_projects = [f for f in os.listdir(ROOT) if f.endswith('.csproj')]
+    if not root_projects:
+        print('  ⏭  không có project .csproj ở thư mục gốc — bỏ qua')
+        return True
+
+    sub_dirs = set()
+    for dp, dn, fn in os.walk(ROOT):
+        dn[:] = [d for d in dn if d not in ('bin', 'obj', 'node_modules', '.git', 'dist', 'publish', 'lib')]
+        if dp == ROOT:
+            continue
+        if any(f.endswith('.csproj') for f in fn):
+            sub_dirs.add(os.path.relpath(dp, ROOT).split(os.sep)[0])
+
+    if not sub_dirs:
+        print('  ⏭  không có project con — bỏ qua')
+        return True
+
+    problems = []
+    for proj in root_projects:
+        text = open(os.path.join(ROOT, proj), encoding='utf-8-sig').read()
+        m = re.search(r'<DefaultItemExcludes>(.*?)</DefaultItemExcludes>', text, re.DOTALL)
+        excludes = m.group(1) if m else ''
+        for d in sorted(sub_dirs):
+            # Chấp nhận "Dir\**", "Dir/**" hoặc "Dir;**"
+            pat = re.escape(d) + r'[\\/]'
+            if not re.search(pat, excludes):
+                problems.append(f'{proj}: thư mục con "{d}/" có project .csproj nhưng CHƯA bị loại khỏi '
+                                f'glob mặc định -> project gốc sẽ biên dịch luôn source của nó '
+                                f'(trùng Main / thiếu reference / trùng AssemblyInfo trong obj/)')
+    if problems:
+        fail('glob-project-con', '\n      ' + '\n      '.join(problems))
+        return False
+    print(f'  ✅ Project gốc đã loại trừ {len(sub_dirs)} thư mục project con khỏi glob (**\*.cs)')
+    return True
+
+
 def main():
     print('=' * 74)
     print('KIỂM TRA TỔNG HỢP (không cần .NET SDK)')
@@ -280,6 +330,7 @@ def main():
         check_views(),
         check_engine_api(),
         check_selftest(),
+        check_root_glob(),
     ]
     print('-' * 74)
     if FAILS:

@@ -16,6 +16,21 @@
 		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 
+		<!--
+		  CỰC KỲ QUAN TRỌNG — LỖI CÓ SẴN TỪ REPO GỐC:
+		  Project này nằm Ở THƯ MỤC GỐC của repo, mà glob mặc định của SDK là "**\*.cs"
+		  nên nó nuốt luôn source của các project con:
+		    MedicalAutoFillWeb\**\*.cs  (thiếu reference Microsoft.AspNetCore ->
+		                                 CS0246 'HttpGet'/'IActionResult' not found)
+		    MedinetBridge\Program.cs    (trùng [STAThread] Main -> CS0017)
+		    *\obj\**\*.AssemblyInfo.cs  (trùng AssemblyVersion/TargetFramework attribute)
+		  Nghĩa là `dotnet build` ở thư mục gốc KHÔNG BAO GIỜ thành công.
+		  (Trong Visual Studio có thể tưởng là ổn vì .sln build từng project riêng,
+		  nhưng project gốc vẫn tự glob như vậy.)
+		  Phải loại trừ thủ công các thư mục không thuộc project này.
+		-->
+		<DefaultItemExcludes>$(DefaultItemExcludes);MedicalAutoFillWeb\**;MedinetBridge\**;MedicalAutoFillApp\**;Shared\**;Tests\**;publish\**;docs\**;node_modules\**</DefaultItemExcludes>
+
 		<!-- Windows Forms không tương thích tốt với Full Trim, giữ false nhưng loại bỏ symbol -->
 		<PublishTrimmed>false</PublishTrimmed>
 		<DebugType>none</DebugType>
