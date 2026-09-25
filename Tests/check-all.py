@@ -339,14 +339,32 @@ def check_usings():
 # ------------------------------------------------------------------ 11. bẫy API WinForms/WebView2
 API_TRAPS = [
     # (regex, thông báo) — mỗi mục là MỘT LỖI BIÊN DỊCH THẬT mà CI đã bắt được.
-    (r'\bcore\.AcceleratorKeyPressed\b|CoreWebView2\s*\.\s*AcceleratorKeyPressed',
-     "AcceleratorKeyPressed là event của CoreWebView2CONTROLLER, không phải CoreWebView2 (CS1061). "
-     "Dùng _webView.CoreWebView2Controller.AcceleratorKeyPressed"),
+    #
+    # Riêng nhóm AcceleratorKeyPressed đã ngốn 3 vòng CI vì tưởng "chỉ cần tìm
+    # đúng object nào có event đó". Sự thật (kiểm chứng bằng tài liệu đúng phiên
+    # bản SDK 1.0.2535.41 + bản decompile DLL + dự án thật trên GitHub):
+    #   CoreWebView2.AcceleratorKeyPressed    -> CS1061, không tồn tại
+    #   WebView2.AcceleratorKeyPressed        -> CS1061, không tồn tại
+    #   _webView.CoreWebView2Controller       -> CS1061, controller là field
+    #                                            private `_coreWebView2Controller`
+    #                                            ở MỌI phiên bản SDK
+    # Cách ĐÚNG, nguyên văn Remarks của lớp WebView2 (WinForms): phím accelerator
+    # bấm trong control sẽ "fire standard key press events such as OnKeyDown", và
+    # đặt Handled của EventArgs = true thì chặn được hành vi mặc định của trình
+    # duyệt. Tức là _webView.KeyDown += ... — xem HookBrowserHotkeys() trong Form1.cs.
+    (r'\b(?:core|CoreWebView2)\s*\??\.\s*AcceleratorKeyPressed\b',
+     "AcceleratorKeyPressed KHÔNG có trên CoreWebView2 (CS1061) — nó thuộc CoreWebView2Controller. "
+     "Từ app WinForms dùng _webView.KeyDown += ... (HookBrowserHotkeys trong Form1.cs)"),
+    (r'\b(?:_webView|webView|wv|web|browser|ctrl|control)\s*\??\.\s*AcceleratorKeyPressed\b',
+     "Control WebView2 của WinForms KHÔNG có event AcceleratorKeyPressed public "
+     "(CS1061 — đã xác nhận trên SDK 1.0.2535.41, dù tài liệu vài trang gợi ý ngược lại). "
+     "Dùng _webView.KeyDown += ... rồi e.Handled = true; e.SuppressKeyPress = true;"),
+    (r'\.CoreWebView2Controller\b',
+     "Control WebView2 WinForms GIỮ PRIVATE controller (field _coreWebView2Controller) ở MỌI "
+     "phiên bản SDK -> truy cập công khai là CS1061. Chỉ còn reflection (rủi ro vỡ âm thầm) "
+     "hoặc dùng _webView.KeyDown += ... — chọn KeyDown."),
     (r'CoreWebView2\??\s*\.\s*Dispose\s*\(',
      "CoreWebView2 KHÔNG implement IDisposable (CS1061). Dispose chính control WebView2 là đủ."),
-    (r'\.CoreWebView2Controller',
-     "Control WebView2 của WinForms GIỮ PRIVATE CoreWebView2Controller (CS1061). "
-     "Dùng event cấp control: _webView.AcceleratorKeyPressed += ..."),
     (r'new\s+ToolStripTextBox\s*\{[^}]*\bSpring\b',
      "ToolStripTextBox không có thuộc tính Spring trong object initializer (CS0117). "
      "Muốn ô chiếm hết chỗ trống thì tự tính Width khi thanh đổi kích thước."),

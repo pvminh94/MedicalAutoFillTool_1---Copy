@@ -327,7 +327,7 @@ public partial class Form1 : Form
             core.SourceChanged += (_, _) => UpdateAddressBar();
             core.WebMessageReceived += Core_WebMessageReceived;
             core.PermissionRequested += Core_PermissionRequested;
-            HookAcceleratorKeys(_webView!);
+            HookBrowserHotkeys(_webView!);
             core.NewWindowRequested += Core_NewWindowRequested;
             core.ProcessFailed += Core_ProcessFailed;
             core.DocumentTitleChanged += (_, _) => UpdateAddressBar();
@@ -677,44 +677,67 @@ public partial class Form1 : Form
 
     // ------------------------------------------------------- Phím tắt trong trang
     /// <summary>
-    /// Gắn phím tắt cấp trình duyệt (Ctrl+Shift+V ...) vào control WebView2.
+    /// Gắn phím tắt cấp trình duyệt vào control WebView2 bằng event KeyDown
+    /// CHUẨN của WinForms.
     ///
-    /// Event AcceleratorKeyPressed có ở BA chỗ khác nhau và rất dễ gắn nhầm:
-    ///   • CoreWebView2.AcceleratorKeyPressed        -> KHÔNG tồn tại (CS1061)
-    ///   • CoreWebView2Controller.AcceleratorKeyPressed -> tồn tại, nhưng control
-    ///     WebView2 của WinForms GIỮ PRIVATE controller (CS1061 khi truy cập)
-    ///   • WebView2.AcceleratorKeyPressed (control)  -> ĐÚNG, có từ SDK 1.0.705.50,
-    ///     chữ ký EventHandler&lt;CoreWebView2AcceleratorKeyPressedEventArgs&gt;
-    /// Gỡ rồi gắn lại để hàm này idempotent: InitializeWebViewAsync có thể chạy
-    /// nhiều lần (khôi phục sau khi render process chết) trên cùng một control.
+    /// TẠI SAO KHÔNG DÙNG AcceleratorKeyPressed (đã trả giá bằng 2 vòng CI đỏ):
+    ///   • CoreWebView2.AcceleratorKeyPressed            -> không tồn tại (CS1061).
+    ///   • WebView2.AcceleratorKeyPressed (cấp control)  -> không tồn tại (CS1061).
+    ///   • CoreWebView2Controller.AcceleratorKeyPressed  -> CÓ tồn tại, nhưng control
+    ///     WinForms giữ controller trong field PRIVATE `_coreWebView2Controller` ở
+    ///     MỌI phiên bản SDK, nên `_webView.CoreWebView2Controller` cũng CS1061.
+    ///     (Lấy bằng reflection thì được — vài dự án làm vậy — nhưng phải đánh đổi
+    ///     bằng rủi ro vỡ âm thầm khi Microsoft đổi tên field nội bộ, nên không dùng.)
+    ///
+    /// Cách Microsoft chỉ định, nguyên văn Remarks của lớp WebView2 (WinForms):
+    ///   "Accelerator key presses (e.g. Ctrl+P) that occur within the control will fire
+    ///    standard key press events such as OnKeyDown. You can suppress the control's
+    ///    default implementation of an accelerator key press by setting the Handled
+    ///    property of its EventArgs to true."
+    /// Nghĩa là control tự bắt AcceleratorKeyPressed của controller rồi forward thành
+    /// KeyDown; đặt e.Handled = true sẽ được ghi ngược lại controller để chặn hành vi
+    /// mặc định của trình duyệt. Đây là hook chạy TRƯỚC khi Chromium xử lý phím, nên
+    /// Ctrl+Shift+V của ta thắng lệnh "dán thuần văn bản" của trình duyệt.
+    ///
+    /// Gỡ rồi gắn lại để hàm idempotent: InitializeWebViewAsync có thể chạy nhiều lần
+    /// trên cùng một control (đường khôi phục sau khi tiến trình render chết).
     /// </summary>
-    private void HookAcceleratorKeys(WebView2 wv)
+    private void HookBrowserHotkeys(WebView2 wv)
     {
         if (wv == null) return;
         try
         {
-            wv.AcceleratorKeyPressed -= Core_AcceleratorKeyPressed;
-            wv.AcceleratorKeyPressed += Core_AcceleratorKeyPressed;
+            wv.KeyDown -= WebView_KeyDown;
+            wv.KeyDown += WebView_KeyDown;
         }
         catch (Exception ex)
         {
             AppLogger.Warn("Không gắn được phím tắt trình duyệt: " + ex.Message +
-                           " — vẫn dùng được nút 📋 Dán và phím tắt khi focus ngoài trang.");
+                           " — vẫn dùng được các nút trên thanh công cụ và phím tắt khi tiêu điểm ngoài trang.");
         }
     }
 
-    private void Core_AcceleratorKeyPressed(object? sender, CoreWebView2AcceleratorKeyPressedEventArgs e)
+    /// <summary>
+    /// Phím tắt khi tiêu điểm NẰM TRONG trang web. Khi tiêu điểm ở ngoài trang
+    /// (thanh công cụ, bảng dữ liệu) thì ProcessCmdKey phía dưới đảm nhiệm.
+    /// </summary>
+    private void WebView_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.KeyEventKind != CoreWebView2KeyEventKind.KeyDown) return;
-        var mods = Control.ModifierKeys;
-        bool ctrl = (mods & Keys.Control) == Keys.Control;
-        bool shift = (mods & Keys.Shift) == Keys.Shift;
-        var vk = (Keys)e.VirtualKey;
+        // "Ăn" phím: Handled để WebView2 ghi ngược lại controller (chặn trình duyệt
+        // tự xử lý), SuppressKeyPress để không sinh thêm sự kiện KeyPress.
+        void Eat() { e.Handled = true; e.SuppressKeyPress = true; }
+
+        // Trạng thái phím lấy từ chính event, không dùng Control.ModifierKeys —
+        // để đúng với tổ hợp mà trình duyệt vừa bắt được, kể cả khi cửa sổ khác
+        // đang giữ phím.
+        bool ctrl = e.Control;
+        bool shift = e.Shift;
+        var vk = e.KeyCode;
 
         // Ctrl+Shift+V : dán từ clipboard hệ thống (đường CHÍNH, luôn chạy)
         if (ctrl && shift && vk == Keys.V)
         {
-            e.Handled = true;
+            Eat();
             PasteFromClipboard(showPanel: true, fillImmediately: _config.FillImmediatelyAfterPaste);
             return;
         }
@@ -723,7 +746,7 @@ public partial class Form1 : Form
         // Mặc định KHÔNG chặn, để còn dán chữ bình thường vào ô của medinet.
         if (ctrl && !shift && vk == Keys.V && _config.HijackPlainCtrlV)
         {
-            e.Handled = true;
+            Eat();
             PasteFromClipboard(showPanel: true, fillImmediately: _config.FillImmediatelyAfterPaste);
             return;
         }
@@ -731,7 +754,7 @@ public partial class Form1 : Form
         // Ctrl+Enter : điền dòng đang chọn
         if (ctrl && vk == Keys.Enter)
         {
-            e.Handled = true;
+            Eat();
             FillSelectedRow(dryRun: false);
             return;
         }
@@ -739,7 +762,7 @@ public partial class Form1 : Form
         // Ctrl+B : chọn "Không" hàng loạt
         if (ctrl && vk == Keys.B && _config.Options.EnableSelectNoHotkey)
         {
-            e.Handled = true;
+            Eat();
             SelectAllNo();
             return;
         }
@@ -747,25 +770,25 @@ public partial class Form1 : Form
         switch (vk)
         {
             case Keys.F5:
-                e.Handled = true;
+                Eat();
                 ReloadPage();
                 return;
             case Keys.F7:
-                e.Handled = true;
+                Eat();
                 TogglePastePanel();
                 return;
             case Keys.F9:
-                e.Handled = true;
+                Eat();
                 FillNextInQueue();
                 return;
             case Keys.F10:
-                e.Handled = true;
+                Eat();
                 FillSelectedRow(dryRun: true);
                 return;
             case Keys.F12:
                 if (_config.AllowDevTools)
                 {
-                    e.Handled = true;
+                    Eat();
                     try { _webView?.CoreWebView2?.OpenDevToolsWindow(); } catch { }
                 }
                 return;
