@@ -2,8 +2,8 @@
 REM ============================================================================
 REM  CHAY BAN WEB (1 may chu - ca phong dung trinh duyet)
 REM  Gom 2 tien trinh:
-REM    1. MedicalAutoFillWeb  (ASP.NET Core, cong 5000)  — trang dan du lieu
-REM    2. MedinetBridge       (WebView2, cong 5119)      — giu phien dang nhap medinet
+REM    1. MedicalAutoFillWeb  (ASP.NET Core, cong 5000)  - trang dan du lieu
+REM    2. MedinetBridge       (WebView2, cong 5119)      - giu phien dang nhap medinet
 REM
 REM  Neu chi can 1 nguoi dung tren 1 may -> dung run-winforms.bat (don gian hon,
 REM  khong can Bridge, khong can IIS).

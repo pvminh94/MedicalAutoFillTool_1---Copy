@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================================
-REM  CHAY BAN DESKTOP (WinForms + WebView2) — 1 file .exe, khong can IIS/Bridge
+REM  CHAY BAN DESKTOP (WinForms + WebView2) - 1 file .exe, khong can IIS/Bridge
 REM  Day la ban khuyen dung: dan truc tiep tu Excel, dien truc tiep vao medinet.
 REM ============================================================================
 cd /d "%~dp0"

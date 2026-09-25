@@ -1,8 +1,8 @@
 @echo off
 REM ============================================================================
 REM  KIEM TRA TOAN BO REPO (khong can Visual Studio, khong can build)
-REM    1. Tests/check-all.py              — cau truc C#, csproj, JS, JSON, view, engine API
-REM    2. Tests/engine.test.mjs (jsdom)   — 48 case cho engine dien form
+REM    1. Tests/check-all.py              - cau truc C#, csproj, JS, JSON, view, engine API
+REM    2. Tests/engine.test.mjs (jsdom)   - 48 case cho engine dien form
 REM  Chay truoc khi commit de tranh day loi len CI.
 REM ============================================================================
 cd /d "%~dp0.."
@@ -31,7 +31,7 @@ cd ..
 
 echo.
 if defined FAIL (
-    echo ===== CO LOI — xem chi tiet o tren =====
+    echo ===== CO LOI - xem chi tiet o tren =====
     pause
     exit /b 1
 )
