@@ -1,15 +1,27 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, BarChart3, FileDown, FileSpreadsheet, FileText, Lock, Printer, RefreshCw, ShieldCheck } from 'lucide-react';
-import { Fragment, useMemo, useState } from 'react';
+import {
+  Archive,
+  BarChart3,
+  Eye,
+  FileDown,
+  FileSpreadsheet,
+  FileText,
+  Lock,
+  Printer,
+  RefreshCw,
+  ShieldCheck,
+  Unlock,
+} from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader, StatCard } from '@/components/shared/page-header';
 import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
-import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
+import { ReportTable } from '@/components/bao-cao/report-table';
 import { apiFetch, downloadFile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn, formatDateTime, formatNumber, todayISO } from '@/lib/utils';
@@ -92,6 +104,17 @@ export default function ReportViewPage() {
   const queryClient = useQueryClient();
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [confirmLock, setConfirmLock] = useState<SnapshotRow | null>(null);
+  const [confirmUnlock, setConfirmUnlock] = useState<SnapshotRow | null>(null);
+  const [viewSnapshot, setViewSnapshot] = useState<SnapshotRow | null>(null);
+
+  const { data: snapshotDetail, isLoading: loadingSnapshot } = useQuery({
+    queryKey: ['report-snapshot', viewSnapshot?.id],
+    enabled: !!viewSnapshot,
+    queryFn: () =>
+      apiFetch<SnapshotRow & { payload: ReportBuild; createdAt: string; createdBy: number }>(
+        `/reports/snapshots/${viewSnapshot?.id}`,
+      ),
+  });
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [period, setPeriod] = useState('week');
   const [date, setDate] = useState(todayISO());
@@ -279,9 +302,17 @@ export default function ReportViewPage() {
                       Duyệt
                     </Button>
                   ) : null}
+                  <Button size="sm" variant="ghost" onClick={() => setViewSnapshot(s)}>
+                    <Eye /> Xem
+                  </Button>
                   {can('report.snapshot.lock') && s.status !== 'LOCKED' ? (
                     <Button size="sm" variant="outline" onClick={() => setConfirmLock(s)}>
                       <Lock /> Khoá
+                    </Button>
+                  ) : null}
+                  {can('report.snapshot.lock') && s.status === 'LOCKED' ? (
+                    <Button size="sm" variant="outline" onClick={() => setConfirmUnlock(s)}>
+                      <Unlock /> Mở khoá
                     </Button>
                   ) : null}
                 </div>
@@ -290,6 +321,47 @@ export default function ReportViewPage() {
           </div>
         )}
       </Dialog>
+
+      <Dialog
+        open={!!viewSnapshot}
+        onClose={() => setViewSnapshot(null)}
+        size="xl"
+        title={viewSnapshot ? `Số liệu đã chốt: ${viewSnapshot.title}` : 'Số liệu đã chốt'}
+        description="Nguyên trạng số liệu tại thời điểm chốt — không đổi dù số liệu nhập về sau có sửa"
+      >
+        {loadingSnapshot || !snapshotDetail ? (
+          <Skeleton className="h-72" />
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
+              <Badge tone={SNAPSHOT_STATUS[snapshotDetail.status]?.tone ?? 'muted'}>
+                {SNAPSHOT_STATUS[snapshotDetail.status]?.label ?? snapshotDetail.status}
+              </Badge>
+              <span>{snapshotDetail.periodLabel}</span>
+              <span>
+                {snapshotDetail.dateFrom} → {snapshotDetail.dateTo}
+              </span>
+              <span>Chốt lúc {formatDateTime(snapshotDetail.createdAt)}</span>
+            </div>
+            <ReportTable data={snapshotDetail.payload} compact />
+          </div>
+        )}
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmUnlock}
+        title="Mở khoá bản chốt số liệu"
+        message={
+          <>
+            Mở khoá <b>{confirmUnlock?.title}</b>? Sau khi mở khoá, các khoa có thể sửa lại số liệu
+            của kỳ này.
+          </>
+        }
+        confirmText="Mở khoá"
+        loading={setSnapshotStatus.isPending}
+        onConfirm={() => confirmUnlock && setSnapshotStatus.mutate({ id: confirmUnlock.id, status: 'APPROVED' })}
+        onClose={() => setConfirmUnlock(null)}
+      />
 
       <ConfirmDialog
         open={!!confirmLock}
@@ -330,79 +402,7 @@ export default function ReportViewPage() {
             {data.sections.length === 0 ? (
               <EmptyState title="Mẫu báo cáo chưa có dữ liệu cấu trúc" />
             ) : (
-              <TableWrap>
-                <thead>
-                  <tr>
-                    <Th className="sticky left-0 z-10 bg-[var(--card)]">Chỉ tiêu</Th>
-                    {data.columns.map((col) => (
-                      <Th key={col.colKey} className="text-center">
-                        <div className="text-[11px] font-normal text-[var(--muted-foreground)]">{col.groupLabel || '\u00A0'}</div>
-                        <div>{col.label}</div>
-                      </Th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.sections.map((section) => (
-                    <Fragment key={section.id}>
-                      <tr className="bg-[var(--muted)]/60">
-                        <Td className="font-semibold uppercase">{section.title}</Td>
-                        {data.columns.map((col) => (
-                          <Td key={col.colKey} />
-                        ))}
-                      </tr>
-                      {[
-                        ...(section.rows && section.rows.length
-                          ? [{ id: null as number | null, label: '', note: '', rows: section.rows }]
-                          : []),
-                        ...section.blocks,
-                      ].map((block, bi) => (
-                        <Fragment key={`${section.id}-${bi}`}>
-                          {block.label ? (
-                            <tr className="bg-[var(--muted)]/30">
-                              <Td className="pl-5 font-medium italic">{block.label}</Td>
-                              {data.columns.map((col) => (
-                                <Td key={col.colKey} />
-                              ))}
-                            </tr>
-                          ) : null}
-                          {block.rows.map((row) => (
-                            <Tr key={row.rowId} className={cn(row.isBold && 'font-semibold', row.isTotal && 'bg-[var(--accent)]/40')}>
-                              <Td className="sticky left-0 z-10 bg-[var(--card)] pl-5">
-                                {row.rowLabel}
-                                {row.unit ? <span className="ml-1 text-[10px] text-[var(--muted-foreground)]">({row.unit})</span> : null}
-                              </Td>
-                              {data.columns.map((col) => {
-                                const cell = row.cells.find((c) => c.colKey === col.colKey);
-                                return (
-                                  <Td
-                                    key={col.colKey}
-                                    className={cn(
-                                      'tabular-nums',
-                                      col.align === 'left' ? 'text-left' : 'text-right',
-                                      col.kind === 'CALC' && 'text-[var(--muted-foreground)]',
-                                    )}
-                                  >
-                                    {cell?.formatted ?? ''}
-                                  </Td>
-                                );
-                              })}
-                            </Tr>
-                          ))}
-                        </Fragment>
-                      ))}
-                    </Fragment>
-                  ))}
-                  <Tr className="bg-[var(--muted)] font-bold">
-                    <Td className="sticky left-0 z-10 bg-[var(--card)]">TỔNG CỘNG</Td>
-                    {data.columns.map((col) => (
-                      <Td key={col.colKey} className={cn('tabular-nums', col.align === 'left' ? 'text-left' : 'text-right')}>
-                        {formatNumber(data.totals[col.colKey] ?? 0)}
-                      </Td>
-                    ))}
-                  </Tr>
-                </tbody>
-              </TableWrap>
+              <ReportTable data={data} />
             )}
 
             <div className="flex flex-wrap items-end justify-between gap-6 px-6 py-5 text-sm">

@@ -4,6 +4,7 @@
  * theo kỳ, tổng hợp toàn viện và kết xuất Excel/Word/PDF.
  */
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../audit/audit.module';
 import { ReportsExportService } from './reports-export.service';
 import { ReportsService } from './reports.service';
 import {
@@ -14,6 +15,7 @@ import {
 } from './reports.controller';
 
 @Module({
+  imports: [AuditModule],
   controllers: [
     ReportTemplateController,
     ReportViewController,

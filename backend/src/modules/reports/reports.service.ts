@@ -13,6 +13,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -36,6 +37,7 @@ import { evaluateFormula, formulaRefs } from '../../common/utils/formula.util';
 import { resolvePeriod, eachDay, today } from '../../common/utils/date.util';
 import type { AccessContext } from '../../common/types/access-context';
 import { CacheService } from '../../infra/cache/cache.service';
+import { AuditService } from '../audit/audit.service';
 import type {
   ColumnInputDto,
   CreateReportTemplateDto,
@@ -134,6 +136,7 @@ export class ReportsService {
   constructor(
     private readonly db: DbService,
     private readonly cache: CacheService,
+    private readonly audit: AuditService,
   ) {}
 
   /* ============================================================ MẪU BÁO CÁO */
@@ -1434,14 +1437,48 @@ export class ReportsService {
     return buildPage(rows, countRow?.total ?? 0, query.page, query.limit);
   }
 
+  /**
+   * Đổi trạng thái bản chốt: DRAFT → APPROVED → LOCKED.
+   *
+   * Mở khoá (LOCKED → APPROVED/DRAFT) chỉ dành cho người có quyền quản trị bản chốt;
+   * mọi thay đổi đều ghi nhật ký để biết ai đã mở khoá và khi nào.
+   */
   async updateSnapshotStatus(id: number, status: 'DRAFT' | 'APPROVED' | 'LOCKED', user: AccessContext) {
+    const [current] = await this.db.db
+      .select()
+      .from(reportSnapshots)
+      .where(eq(reportSnapshots.id, id))
+      .limit(1);
+    if (!current) throw new NotFoundException('Không tìm thấy bản chốt số liệu');
+    if (current.status === status) return current;
+
+    const unlocking = current.status === 'LOCKED' && status !== 'LOCKED';
+    if (unlocking && !user.isSuperAdmin && !user.permissions.includes('report.snapshot.lock')) {
+      throw new ForbiddenException('Chỉ người có quyền khoá bản chốt mới được mở khoá');
+    }
+
     const [row] = await this.db.db
       .update(reportSnapshots)
-      .set({ status, lockedAt: status === 'LOCKED' ? new Date() : null })
+      .set({
+        status,
+        lockedAt: status === 'LOCKED' ? new Date() : null,
+      })
       .where(eq(reportSnapshots.id, id))
       .returning();
-    if (!row) throw new NotFoundException('Không tìm thấy bản chốt số liệu');
-    void user;
+
+    await this.audit.log({
+      module: 'REPORT',
+      action: unlocking ? 'UNLOCK' : 'UPDATE',
+      entity: 'report_snapshot',
+      entityId: id,
+      description: unlocking
+        ? `Mở khoá bản chốt số liệu "${current.title}" (${current.status} → ${status})`
+        : `Chuyển bản chốt số liệu "${current.title}" sang ${status}`,
+      userId: user.id,
+      username: user.username,
+      fullName: user.fullName,
+    });
+    await this.cache.delByPrefix(`report:${current.templateId}`);
     return row;
   }
 
