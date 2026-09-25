@@ -406,7 +406,8 @@ export class HsbaService {
       for (const step of workflow.steps) {
         const who = this.signCondition(step, user);
         if (!who) continue;
-        const pending = sql`${hsbaRequests.status} = ${`CHO_${step.key}`} and ${hsbaRequests.pendingStepKey} = ${step.key}`;
+        // Phiếu mới ở trạng thái CHO_<bước>; phiếu bị trả lại mang trạng thái TRA_LAI
+        const pending = sql`(${hsbaRequests.status} = ${`CHO_${step.key}`} or ${hsbaRequests.status} = 'TRA_LAI') and ${hsbaRequests.pendingStepKey} = ${step.key}`;
         conditions.push(sql`(${pending}) and (${who})` as SQL);
       }
     }
@@ -837,6 +838,10 @@ export class HsbaService {
     if (['HOAN_TAT', 'DA_HUY'].includes(current.status)) {
       throw new BadRequestException('Phiếu đã hoàn tất hoặc đã huỷ — không sửa được nội dung');
     }
+    // Chỉ sửa được khi phiếu còn ở bước người đề nghị (phiếu mới hoặc vừa bị trả lại)
+    if (!user.isSuperAdmin && current.currentStep > 0 && current.status !== 'TRA_LAI') {
+      throw new BadRequestException('Phiếu đã được ký ở bước tiếp theo — đề nghị trả lại phiếu trước khi sửa');
+    }
     if (dto.workflowId && dto.workflowId !== current.workflowId) {
       const [used] = await this.db.db
         .select({ total: sql<number>`count(*)::int` })
@@ -1007,7 +1012,9 @@ export class HsbaService {
       await tx
         .update(hsbaRequests)
         .set({
-          status: targetStatus,
+          // Đánh dấu rõ "đã trả lại" để thống kê và bộ lọc tách được khỏi phiếu mới,
+          // nhưng vẫn chờ đúng bước đầu của quy trình để người đề nghị sửa và gửi lại.
+          status: targetIndex === 0 ? 'TRA_LAI' : targetStatus,
           currentStep: targetIndex,
           pendingStepKey: target.key,
           returnReason: reason,
@@ -1018,10 +1025,28 @@ export class HsbaService {
         })
         .where(eq(hsbaRequests.id, id));
 
-      // Chữ ký trước đó không còn giá trị → ghi log và xoá chữ ký phía sau
-      await tx
+      // Nội dung sẽ được sửa lại nên mọi chữ ký cũ đều hết giá trị:
+      // người đề nghị phải ký lại nội dung mới, các bước sau duyệt lại từ đầu.
+      const removed = await tx
         .delete(hsbaSignatures)
-        .where(and(eq(hsbaSignatures.requestId, id), sql`${hsbaSignatures.stepKey} <> ${target.key}`));
+        .where(eq(hsbaSignatures.requestId, id))
+        .returning({ stepKey: hsbaSignatures.stepKey });
+
+      if (removed.length > 0) {
+        await tx.insert(hsbaLogs).values({
+          requestId: id,
+          userId: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          action: 'UNSIGN',
+          detail: `Huỷ ${removed.length} chữ ký cũ do phiếu bị trả lại (${removed
+            .map((r) => r.stepKey)
+            .join(', ')})`,
+          fromStatus: detail.status,
+          toStatus: targetStatus,
+          ip: client?.ip ?? '',
+        });
+      }
 
       await tx.insert(hsbaLogs).values({
         requestId: id,
@@ -1031,7 +1056,7 @@ export class HsbaService {
         action: 'RETURN',
         detail: `Trả lại phiếu: ${reason}`,
         fromStatus: detail.status,
-        toStatus: targetStatus,
+        toStatus: targetIndex === 0 ? 'TRA_LAI' : targetStatus,
         ip: client?.ip ?? '',
       });
     });
@@ -1080,7 +1105,7 @@ export class HsbaService {
 
   async remove(id: number, user: AccessContext) {
     const detail = await this.findOne(id);
-    if (!['DA_HUY', 'TRA_LAI', 'HOAN_TAT'].includes(detail.status) && !user.isSuperAdmin) {
+    if (!['DA_HUY', 'HOAN_TAT'].includes(detail.status) && !user.isSuperAdmin) {
       throw new BadRequestException('Chỉ xoá được phiếu đã kết thúc hoặc đã huỷ');
     }
     await this.db.db
@@ -1130,7 +1155,7 @@ export class HsbaService {
         departmentName: hsbaRequests.departmentName,
         total: sql<number>`count(*)::int`,
         completed: sql<number>`count(*) filter (where ${hsbaRequests.status} = 'HOAN_TAT')::int`,
-        pending: sql<number>`count(*) filter (where ${hsbaRequests.status} like 'CHO_%')::int`,
+        pending: sql<number>`count(*) filter (where ${hsbaRequests.status} like 'CHO_%' or ${hsbaRequests.status} = 'TRA_LAI')::int`,
         returned: sql<number>`count(*) filter (where ${hsbaRequests.status} = 'TRA_LAI')::int`,
       })
       .from(hsbaRequests)
@@ -1141,7 +1166,7 @@ export class HsbaService {
     const [totals] = await this.db.db
       .select({
         total: sql<number>`count(*)::int`,
-        pending: sql<number>`count(*) filter (where ${hsbaRequests.status} like 'CHO_%')::int`,
+        pending: sql<number>`count(*) filter (where ${hsbaRequests.status} like 'CHO_%' or ${hsbaRequests.status} = 'TRA_LAI')::int`,
         completed: sql<number>`count(*) filter (where ${hsbaRequests.status} = 'HOAN_TAT')::int`,
         returned: sql<number>`count(*) filter (where ${hsbaRequests.status} = 'TRA_LAI')::int`,
         avgDays: sql<string>`coalesce(round(avg(extract(epoch from (coalesce(${hsbaRequests.completedAt}, now()) - ${hsbaRequests.createdAt})) / 86400)::numeric, 1), 0)::text`,

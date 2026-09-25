@@ -50,15 +50,43 @@ interface HsbaRow {
   canSign?: boolean;
 }
 
-const STATUS_TABS = [
-  { value: '', label: 'Tất cả' },
-  { value: 'CHO_DE_NGHI', label: 'Chờ đề nghị' },
-  { value: 'CHO_KHTB', label: 'Chờ KHTH' },
-  { value: 'CHO_TC', label: 'Chờ tài chính' },
-  { value: 'HOAN_TAT', label: 'Hoàn tất' },
-  { value: 'TRA_LAI', label: 'Đã trả lại' },
-  { value: 'DA_HUY', label: 'Đã hủy' },
-];
+interface WorkflowStepOption {
+  key: string;
+  name: string;
+  title?: string;
+}
+
+interface WorkflowOption {
+  id: number;
+  code: string;
+  name: string;
+  isDefault: boolean;
+  departmentId: number | null;
+  steps: WorkflowStepOption[];
+}
+
+/**
+ * Các tab trạng thái suy ra từ bước của quy trình ký thật:
+ * bước `TAICHINH` → trạng thái `CHO_TAICHINH`. Nhờ vậy thêm/bớt bước trong
+ * trang Quy trình ký là danh sách tự cập nhật, không phải sửa mã nguồn.
+ */
+function buildStatusTabs(steps: WorkflowStepOption[]): { value: string; label: string }[] {
+  const seen = new Set<string>();
+  const stepTabs = steps
+    .filter((step) => {
+      if (seen.has(step.key)) return false;
+      seen.add(step.key);
+      return true;
+    })
+    .map((step) => ({ value: `CHO_${step.key}`, label: `Chờ ${step.name}` }));
+  return [
+    { value: '', label: 'Tất cả' },
+    ...stepTabs,
+    { value: 'HOAN_TAT', label: 'Hoàn tất' },
+    { value: 'TRA_LAI', label: 'Bị trả lại' },
+    { value: 'DA_HUY', label: 'Đã hủy' },
+  ];
+}
 
 function RequestsContent() {
   const params = useSearchParams();
@@ -84,6 +112,15 @@ function RequestsContent() {
     queryKey: ['departments-options'],
     queryFn: () => apiFetch<{ id: number; name: string; level: number }[]>('/departments/options'),
   });
+
+  const { data: workflows } = useQuery({
+    queryKey: ['hsba-workflows'],
+    queryFn: () => apiFetch<WorkflowOption[]>('/hsba/workflows'),
+  });
+
+  const statusTabs = buildStatusTabs(
+    (workflows ?? []).find((w) => w.isDefault)?.steps ?? workflows?.[0]?.steps ?? [],
+  );
 
   const advancedCount = [
     departmentId,
@@ -167,7 +204,7 @@ function RequestsContent() {
 
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-          {STATUS_TABS.map((tab) => (
+          {statusTabs.map((tab) => (
             <button
               key={tab.value}
               type="button"

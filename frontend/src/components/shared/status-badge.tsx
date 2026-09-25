@@ -4,21 +4,21 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'muted' | 'info' | 'da
   HOAN_TAT: 'success',
   TRA_LAI: 'warning',
   DA_HUY: 'muted',
-  CHO_DE_NGHI: 'info',
-  CHO_KHTB: 'info',
-  CHO_TC: 'info',
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  CHO_DE_NGHI: 'Chờ người đề nghị xác nhận',
-  CHO_KHTB: 'Chờ Duyệt/TB.KHTH',
-  CHO_TC: 'Chờ TC xác nhận hủy thanh toán',
-  HOAN_TAT: 'Hoàn tất',
-  TRA_LAI: 'Đã trả lại',
-  DA_HUY: 'Đã hủy',
+/** Tên bước ký hiển thị được khi trạng thái là `CHO_<BƯỚC>`. */
+const STEP_LABEL: Record<string, string> = {
+  DE_NGHI: 'người đề nghị xác nhận',
+  KHTB: 'Duyệt/TB.KHTH xử lý',
+  TAICHINH: 'tài chính xác nhận hủy thanh toán',
 };
 
-/** Nhãn trạng thái phiếu sửa hồ sơ bệnh án. */
+/** Nhãn trạng thái phiếu sửa hồ sơ bệnh án (mọi bước ký đều hiển thị được). */
 export function StatusBadge({ status, label }: { status: string; label?: string }) {
-  return <Badge tone={STATUS_TONE[status] ?? 'info'}>{label ?? STATUS_LABEL[status] ?? status}</Badge>;
+  const stepKey = status.startsWith('CHO_') ? status.slice(4) : '';
+  const text =
+    label ??
+    (stepKey ? `Chờ ${STEP_LABEL[stepKey] ?? `bước ${stepKey}`}` : status);
+  const tone = STATUS_TONE[status] ?? (status.startsWith('CHO_') ? 'info' : 'info');
+  return <Badge tone={tone}>{text}</Badge>;
 }

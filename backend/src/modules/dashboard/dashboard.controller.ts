@@ -58,7 +58,7 @@ export class DashboardController {
     const [hsbaTotals] = await this.db
       .select({
         total: sql<number>`count(*)::int`,
-        pending: sql<number>`count(*) filter (where ${hsbaRequests.status} like 'CHO_%')::int`,
+        pending: sql<number>`count(*) filter (where ${hsbaRequests.status} like 'CHO_%' or ${hsbaRequests.status} = 'TRA_LAI')::int`,
         completed: sql<number>`count(*) filter (where ${hsbaRequests.status} = 'HOAN_TAT')::int`,
         returned: sql<number>`count(*) filter (where ${hsbaRequests.status} = 'TRA_LAI')::int`,
         today: sql<number>`count(*) filter (where ${hsbaRequests.createdAt}::date = current_date)::int`,

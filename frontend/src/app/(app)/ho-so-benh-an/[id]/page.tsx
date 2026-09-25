@@ -10,6 +10,7 @@ import {
   History,
   PenLine,
   Printer,
+  Send,
   ShieldAlert,
   ShieldCheck,
   Undo2,
@@ -250,7 +251,37 @@ export default function HsbaDetailPage() {
               </a>
             </>
           ) : null}
-          {editable && can('hsba.request.update') ? (
+          {data.status === 'TRA_LAI' && can('hsba.request.update') ? (
+            <Button
+              onClick={() => {
+                setEditForm({
+                  requesterId: data.requesterId,
+                  requesterName: data.requesterName,
+                  requesterTitle: data.requesterTitle ?? '',
+                  departmentId: data.departmentId,
+                  departmentName: data.departmentName ?? '',
+                  priority: data.priority,
+                  workflowId: data.workflowId,
+                  patientName: data.patientName,
+                  patientBirthYear: data.patientBirthYear ?? '',
+                  patientGender: data.patientGender ?? '',
+                  maKcb: data.maKcb ?? '',
+                  maTheBhyt: data.maTheBhyt ?? '',
+                  ngayVaoVien: data.ngayVaoVien ?? '',
+                  ngayRaVien: data.ngayRaVien ?? '',
+                  doiTuong: data.doiTuong ?? '',
+                  reason: data.reason,
+                  content: data.content,
+                  amount: data.amount ?? '',
+                  attachmentsNote: data.attachmentsNote ?? '',
+                });
+                setEditOpen(true);
+              }}
+            >
+              <PenLine /> Sửa & gửi lại
+            </Button>
+          ) : null}
+          {editable && data.status !== 'TRA_LAI' && can('hsba.request.update') ? (
             <Button
               variant="outline"
               onClick={() => {
@@ -415,7 +446,15 @@ export default function HsbaDetailPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {step.canSignCurrent ? (
                           <Button size="sm" onClick={() => setSignTarget(step)}>
-                            <CheckCircle2 /> Ký bước này
+                            {data.returnCount > 0 && step.state === 'PENDING' ? (
+                              <>
+                                <Send /> Gửi lại phiếu
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 /> Ký bước này
+                              </>
+                            )}
                           </Button>
                         ) : (
                           <span className="text-[11px] text-[var(--muted-foreground)]">

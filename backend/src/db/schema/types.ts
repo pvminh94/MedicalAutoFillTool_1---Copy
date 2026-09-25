@@ -9,7 +9,8 @@
 export const REQUEST_STATUSES = [
   'CHO_DE_NGHI', // chờ người đề nghị xác nhận
   'CHO_KHTB', // chờ duyệt / TB.KHTH
-  'CHO_TC', // chờ tài chính xác nhận hủy thanh toán
+  'CHO_TC', // chờ tài chính (mã cũ, giữ để tương thích)
+  'CHO_TAICHINH', // chờ tài chính xác nhận hủy thanh toán (theo bước TAICHINH)
   'HOAN_TAT', // hoàn tất
   'TRA_LAI', // bị trả lại
   'DA_HUY', // đã hủy
@@ -20,8 +21,9 @@ export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   CHO_DE_NGHI: 'Chờ người đề nghị xác nhận',
   CHO_KHTB: 'Chờ Duyệt/TB.KHTH',
   CHO_TC: 'Chờ TC xác nhận hủy thanh toán',
+  CHO_TAICHINH: 'Chờ TC xác nhận hủy thanh toán',
   HOAN_TAT: 'Hoàn tất',
-  TRA_LAI: 'Đã trả lại',
+  TRA_LAI: 'Bị trả lại — chờ sửa & gửi lại',
   DA_HUY: 'Đã hủy',
 };
 
