@@ -258,13 +258,32 @@ async function seedWorkflow(): Promise<void> {
 async function seedUtilities(): Promise<void> {
   title(`Tiện ích (${UTILITIES.length})`);
   let created = 0;
+  let updated = 0;
   for (const u of UTILITIES) {
     const [existing] = await db
       .select({ id: schema.utilities.id })
       .from(schema.utilities)
       .where(eq(schema.utilities.code, u.code))
       .limit(1);
-    if (existing) continue;
+    if (existing) {
+      // Cập nhật lại thông tin hiển thị theo bản seed mới nhất (đường dẫn, biểu tượng, thứ tự…)
+      await db
+        .update(schema.utilities)
+        .set({
+          name: u.name,
+          description: u.description,
+          icon: u.icon,
+          kind: u.kind,
+          route: u.route,
+          permissionCode: u.permissionCode,
+          placement: u.placement ?? 'sidebar',
+          color: u.color,
+          sortOrder: u.sortOrder,
+        })
+        .where(eq(schema.utilities.id, existing.id));
+      updated++;
+      continue;
+    }
     await db.insert(schema.utilities).values({
       code: u.code,
       name: u.name,
@@ -280,7 +299,11 @@ async function seedUtilities(): Promise<void> {
     });
     created++;
   }
-  log(created > 0 ? `Đã thêm ${created} tiện ích` : 'Tiện ích đã đầy đủ');
+  log(
+    created > 0 || updated > 0
+      ? `Đã thêm ${created} tiện ích, cập nhật ${updated}`
+      : 'Tiện ích đã đầy đủ',
+  );
 }
 
 async function seedJobs(): Promise<void> {

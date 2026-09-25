@@ -1,17 +1,43 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Hospital, X } from 'lucide-react';
+import { Blocks, Hospital, Sparkles, X } from 'lucide-react';
 import { NAV_GROUPS } from './nav';
+import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
+
+interface UtilityMenuItem {
+  id: number;
+  code: string;
+  name: string;
+  route: string | null;
+  badge?: string | null;
+  openInNewTab?: boolean;
+  kind?: string;
+  placement?: string;
+}
 
 /** Menu dọc: tự ẩn mục không đủ quyền, tự thu gọn trên màn hình nhỏ. */
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const can = useAuth((s) => s.can);
   const user = useAuth((s) => s.user);
+
+  // Tiện ích mở rộng do quản trị viên khai báo — menu hiện theo quyền của từng người
+  const { data: utilities } = useQuery({
+    queryKey: ['utilities-menu', user?.id],
+    enabled: !!user,
+    queryFn: () => apiFetch<UtilityMenuItem[]>('/utilities/menu?placement=sidebar'),
+    staleTime: 120_000,
+  });
+
+  const staticHrefs = new Set(NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href)));
+  const extraUtilities = (utilities ?? []).filter(
+    (u) => u.route && !staticHrefs.has(u.route) && !(u.kind === 'BUILTIN' && staticHrefs.has(u.route)),
+  );
 
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col border-r bg-[var(--card)]">
@@ -66,6 +92,39 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           );
         })}
+        {extraUtilities.length > 0 ? (
+          <div className="space-y-1">
+            <div className="px-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              Tiện ích mở rộng
+            </div>
+            {extraUtilities.map((item) => {
+              const active = pathname === item.route;
+              return (
+                <Link
+                  key={item.code}
+                  href={item.route ?? '#'}
+                  target={item.openInNewTab ? '_blank' : undefined}
+                  rel={item.openInNewTab ? 'noreferrer' : undefined}
+                  onClick={onNavigate}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
+                    active
+                      ? 'bg-[var(--accent)] font-semibold text-[var(--accent-foreground)]'
+                      : 'text-[var(--foreground)] hover:bg-[var(--muted)]',
+                  )}
+                >
+                  {item.kind === 'BUILTIN' ? <Blocks className="size-4 shrink-0" /> : <Sparkles className="size-4 shrink-0" />}
+                  <span className="truncate">{item.name}</span>
+                  {item.badge ? (
+                    <span className="ml-auto rounded-full bg-[var(--accent)] px-1.5 text-[10px] text-[var(--accent-foreground)]">
+                      {item.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
       </nav>
 
       {user ? (
