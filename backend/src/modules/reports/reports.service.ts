@@ -784,7 +784,8 @@ export class ReportsService {
       entryDate = period.to;
     }
 
-    const keys = dto.values.map((v) => `${v.rowId}|${v.colKey}|${entryDate}`);
+    // Khoá nhận biết một ô số liệu: dòng × cột × ngày (mọi bản ghi dưới đây cùng ngày)
+    const cellKey = (rowId: number, colKey: string): string => `${rowId}|${colKey}|${entryDate}`;
     const existing = await this.db.db
       .select({
         id: reportEntries.id,
@@ -800,7 +801,8 @@ export class ReportsService {
           inArray(reportEntries.rowId, [...new Set(dto.values.map((v) => v.rowId))]),
         ),
       );
-    const existingMap = new Map(existing.map((e) => [`${e.rowId}|${e.colKey}`, e]));
+    // Trước đây khoá thiếu ngày nên không bao giờ khớp → lần lưu thứ hai bị lỗi trùng khoá
+    const existingMap = new Map(existing.map((e) => [cellKey(e.rowId, e.colKey), e]));
 
     let created = 0;
     let updated = 0;
@@ -809,8 +811,7 @@ export class ReportsService {
 
     await this.db.transaction(async (tx) => {
       for (const v of dto.values) {
-        const key = `${v.rowId}|${v.colKey}|${entryDate}`;
-        const before = existingMap.get(key);
+        const before = existingMap.get(cellKey(v.rowId, v.colKey));
         if (dto.skipExisting && before && before.value !== 0 && before.value !== v.value) {
           skipped += 1;
           continue;
@@ -860,7 +861,6 @@ export class ReportsService {
             fullName: user.fullName,
           });
         }
-        void keys;
       }
       if (audits.length) await tx.insert(reportEntryAudits).values(audits);
     });
@@ -1147,7 +1147,14 @@ export class ReportsService {
     };
   }
 
-  /** Bảng tổng hợp toàn viện: gom các chỉ tiêu chuẩn từ mọi khoa */
+  /**
+   * Bảng tổng hợp toàn viện.
+   *
+   * Số liệu được gom bằng SQL (sum theo mẫu báo cáo và cột) rồi ghép vào từng khoa,
+   * không lọc mảng trong bộ nhớ — nhờ vậy chạy nhanh kể cả khi có hàng trăm nghìn ô.
+   * Danh sách chỉ tiêu lấy từ cấu hình `summaryKey` của cột báo cáo, các chỉ tiêu
+   * chuẩn của bệnh viện luôn được xếp trước để bảng tổng hợp ổn định.
+   */
   async buildSummary(query: ReportQueryDto, user?: AccessContext) {
     const period = resolvePeriod(query.period ?? 'week', query.date, query.dateFrom, query.dateTo);
 
@@ -1180,54 +1187,67 @@ export class ReportsService {
           .select()
           .from(reportColumns)
           .where(inArray(reportColumns.templateId, templates.map((t) => t.id)))
+          .orderBy(asc(reportColumns.sortOrder))
       : [];
 
+    // Chỉ tiêu tổng hợp: chuẩn của bệnh viện trước, sau đó là các khoá do cột tự khai báo
     const indicatorCols = new Map<string, { label: string; colKey: string }>();
     for (const key of SUMMARY_INDICATORS) indicatorCols.set(key.key, { label: key.label, colKey: '' });
+    for (const col of columns) {
+      if (!col.summaryKey) continue;
+      const existing = indicatorCols.get(col.summaryKey);
+      if (!existing) indicatorCols.set(col.summaryKey, { label: col.label, colKey: col.colKey });
+      else if (!existing.colKey) existing.colKey = col.colKey;
+    }
+    const indicatorKeys = [...indicatorCols.keys()];
 
-    const entries = templates.length
+    // Gom số liệu ngay trong CSDL: mỗi mẫu báo cáo × cột → tổng giá trị
+    const templateIds = templates.map((t) => t.id);
+    const sums = templateIds.length
       ? await this.db.db
           .select({
             templateId: reportEntries.templateId,
-            rowId: reportEntries.rowId,
             colKey: reportEntries.colKey,
-            entryDate: reportEntries.entryDate,
-            value: reportEntries.value,
+            total: sql<number>`coalesce(sum(${reportEntries.value}), 0)::float8`,
+            cells: sql<number>`count(*)::int`,
           })
           .from(reportEntries)
           .where(
             and(
-              inArray(reportEntries.templateId, templates.map((t) => t.id)),
+              inArray(reportEntries.templateId, templateIds),
               sql`${reportEntries.entryDate} between ${period.from} and ${period.to}`,
             ),
           )
+          .groupBy(reportEntries.templateId, reportEntries.colKey)
       : [];
 
-    const templateByDept = new Map(templates.map((t) => [t.departmentId, t]));
-    const colsByTemplate = new Map<number, typeof columns>();
-    for (const c of columns) {
-      const list = colsByTemplate.get(c.templateId) ?? [];
-      list.push(c);
-      colsByTemplate.set(c.templateId, list);
+    const sumsByTemplate = new Map<number, Map<string, number>>();
+    const filledTemplates = new Set<number>();
+    for (const row of sums) {
+      const map = sumsByTemplate.get(row.templateId) ?? new Map<string, number>();
+      map.set(row.colKey, row.total);
+      sumsByTemplate.set(row.templateId, map);
+      filledTemplates.add(row.templateId);
+    }
+
+    const columnsByKey = new Map<string, string>(); // templateId|colKey → summaryKey
+    for (const col of columns) {
+      if (col.summaryKey) columnsByKey.set(`${col.templateId}|${col.colKey}`, col.summaryKey);
     }
 
     const rows = depts.map((dept) => {
-      const template = templateByDept.get(dept.id);
+      const template = templates.find((t) => t.departmentId === dept.id) ?? null;
       const indicators: Record<string, number> = {};
-      for (const key of SUMMARY_INDICATORS) indicators[key.key] = 0;
+      for (const key of indicatorKeys) indicators[key] = 0;
+
       if (template) {
-        const tplCols = (colsByTemplate.get(template.id) ?? []).filter((c) => c.summaryKey);
-        const tplEntries = entries.filter((e) => e.templateId === template.id);
-        for (const col of tplCols) {
-          const sum = tplEntries
-            .filter((e) => e.colKey === col.colKey)
-            .reduce((s, e) => s + e.value, 0);
-          indicators[col.summaryKey] = (indicators[col.summaryKey] ?? 0) + sum;
-          if (!indicatorCols.get(col.summaryKey)?.colKey) {
-            indicatorCols.set(col.summaryKey, { label: col.label, colKey: col.colKey });
-          }
+        for (const [colKey, total] of sumsByTemplate.get(template.id) ?? []) {
+          const summaryKey = columnsByKey.get(`${template.id}|${colKey}`);
+          if (!summaryKey) continue;
+          indicators[summaryKey] = (indicators[summaryKey] ?? 0) + total;
         }
       }
+
       return {
         departmentId: dept.id,
         departmentCode: dept.code,
@@ -1236,22 +1256,22 @@ export class ReportsService {
         templateId: template?.id ?? null,
         templateName: template?.name ?? '',
         indicators,
-        filled: template ? entries.some((e) => e.templateId === template.id) : false,
+        filled: template ? filledTemplates.has(template.id) : false,
       };
     });
 
     const totals: Record<string, number> = {};
-    for (const key of SUMMARY_INDICATORS) {
-      totals[key.key] = rows.reduce((s, r) => s + (r.indicators[key.key] ?? 0), 0);
+    for (const key of indicatorKeys) {
+      totals[key] = rows.reduce((s, r) => s + (r.indicators[key] ?? 0), 0);
     }
 
     return {
       period,
       departments: rows,
-      indicators: [...indicatorCols.entries()].map(([key, v]) => ({
+      indicators: indicatorKeys.map((key) => ({
         key,
-        label: SUMMARY_INDICATORS.find((i) => i.key === key)?.label ?? v.label,
-        colKey: v.colKey,
+        label: SUMMARY_INDICATORS.find((i) => i.key === key)?.label ?? indicatorCols.get(key)?.label ?? key,
+        colKey: indicatorCols.get(key)?.colKey ?? '',
       })),
       totals,
       missing: rows.filter((r) => !r.filled).map((r) => ({ id: r.departmentId, name: r.departmentName })),

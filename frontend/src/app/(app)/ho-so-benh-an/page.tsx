@@ -331,6 +331,8 @@ function RequestsContent() {
                 <option value="code">Số phiếu</option>
                 <option value="status">Trạng thái</option>
                 <option value="ngayVaoVien">Ngày vào viện</option>
+                <option value="amount">Số tiền</option>
+                <option value="returnCount">Số lần bị trả lại</option>
               </Select>
             </div>
             <div className="space-y-1.5">

@@ -149,6 +149,8 @@ export const hsbaRequests = pgTable(
     index('hsba_requests_creator_idx').on(t.createdBy),
     index('hsba_requests_patient_idx').on(t.patientName),
     index('hsba_requests_search_text_idx').on(t.searchText),
+    // Danh sách "chờ tôi xử lý" lọc theo (bước đang chờ, trạng thái)
+    index('hsba_requests_pending_idx').on(t.pendingStepKey, t.status),
     index('hsba_requests_status_created_idx').on(t.status, t.createdAt),
     index('hsba_requests_dept_created_idx').on(t.departmentId, t.createdAt),
     index('hsba_requests_search_idx').using(

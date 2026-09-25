@@ -110,6 +110,29 @@ npm run dev                   # http://localhost:3000
 
 > **Đổi mật khẩu ngay sau khi triển khai thật.**
 
+Muốn xem giao diện với dữ liệu đầy đủ (phiếu ở mọi trạng thái, người dùng theo vai trò,
+số liệu báo cáo của một khoa):
+
+```bash
+cd backend
+npm run db:demo       # CHỈ dùng cho môi trường thử nghiệm
+```
+
+Sau khi chạy, đăng nhập thử: `khtb.lan` / `123456` (duyệt phiếu),
+`tc.hoa` / `123456` (tài chính), `bs.minh` / `123456` (người đề nghị — chỉ thấy phiếu của mình).
+
+### 4.4. Lệnh thường dùng (backend)
+
+| Lệnh | Việc |
+|---|---|
+| `npm run dev` | chạy API ở chế độ theo dõi tệp |
+| `npm run db:generate` | sinh migration từ schema sau khi sửa bảng |
+| `npm run db:migrate` | áp dụng migration còn thiếu |
+| `npm run db:seed` | dữ liệu nền (quyền, vai trò, khoa mẫu, admin) — an toàn khi chạy lại |
+| `npm run db:demo` | dữ liệu mẫu để xem giao diện |
+| `npm run db:backfill-search` | dựng lại chuỗi tìm kiếm không dấu cho phiếu cũ |
+| `npm run typecheck` | kiểm tra kiểu TypeScript |
+
 ---
 
 ## 5. Tài liệu
@@ -122,7 +145,6 @@ npm run dev                   # http://localhost:3000
 | [docs/TRIEN-KHAI.md](docs/TRIEN-KHAI.md) | Triển khai Docker/VPS, sao lưu, nâng cấp |
 | [docs/HUONG-DAN-SU-DUNG.md](docs/HUONG-DAN-SU-DUNG.md) | Hướng dẫn theo vai trò người dùng |
 
-*(Các tài liệu trên đang được hoàn thiện song song với mã nguồn.)*
 
 ---
 

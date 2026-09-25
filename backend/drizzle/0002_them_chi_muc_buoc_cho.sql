@@ -1,0 +1,1 @@
+CREATE INDEX "hsba_requests_pending_idx" ON "hsba_requests" USING btree ("pending_step_key","status");

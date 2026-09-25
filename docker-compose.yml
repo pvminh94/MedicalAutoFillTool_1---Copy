@@ -1,0 +1,103 @@
+## QLBS — Phần mềm Quản lý Bệnh viện
+##
+##   cp .env.example .env      # đổi mật khẩu trong tệp này trước khi dùng thật
+##   docker compose up -d --build
+##
+## Dịch vụ: PostgreSQL · Redis · API (NestJS) · Web (Next.js)
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qlbs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qlbs
+      POSTGRES_USER: qlbs
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Hãy đặt POSTGRES_PASSWORD trong .env}
+      # Sắp xếp tiếng Việt và múi giờ cho báo cáo
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - ${POSTGRES_HOST_DIR:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U qlbs -d qlbs']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: qlbs-redis
+    restart: unless-stopped
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ];
+      then redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      else redis-server --appendonly yes; fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - ${REDIS_HOST_DIR:-./data/redis}:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" ping; else redis-cli ping; fi']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: ./backend
+    container_name: qlbs-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      TZ: Asia/Ho_Chi_Minh
+      DATABASE_URL: postgresql://qlbs:${POSTGRES_PASSWORD}@postgres:5432/qlbs
+      # Mật khẩu Redis dùng chung với dịch vụ redis ở trên
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Hãy đặt REDIS_PASSWORD trong .env}@redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CACHE_DRIVER: redis
+      QUEUE_DRIVER: bullmq
+      QUEUE_AUTO_SCHEDULE: 'true'
+      JWT_SECRET: ${JWT_SECRET:?Hãy đặt JWT_SECRET trong .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Hãy đặt JWT_REFRESH_SECRET trong .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SEED_ADMIN_USER: ${ADMIN_USERNAME:-admin}
+      SEED_ADMIN_PASS: ${ADMIN_PASSWORD:-Admin@123}
+      SEED_ADMIN_NAME: ${ADMIN_FULL_NAME:-Quản trị hệ thống}
+      STORAGE_DIR: /app/uploads
+      EXPORTS_DIR: /app/backups/exports
+      BACKUPS_DIR: /app/backups
+    volumes:
+      - ${UPLOAD_HOST_DIR:-./data/uploads}:/app/uploads
+      - ${BACKUP_HOST_DIR:-./data/backups}:/app/backups
+    ports:
+      - '${API_PORT:-4000}:4000'
+
+  web:
+    build:
+      context: ./frontend
+    container_name: qlbs-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Ho_Chi_Minh
+      # Next.js chuyển tiếp /api và /health sang địa chỉ này
+      API_PROXY_TARGET: http://api:4000
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+
+volumes: {}
+
+networks:
+  default:
+    name: qlbs-network

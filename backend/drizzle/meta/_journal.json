@@ -15,6 +15,13 @@
       "when": 1790346821063,
       "tag": "0001_them_cot_tim_kiem_hsba",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790347549206,
+      "tag": "0002_them_chi_muc_buoc_cho",
+      "breakpoints": true
     }
   ]
 }

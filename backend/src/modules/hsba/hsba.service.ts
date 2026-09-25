@@ -544,6 +544,22 @@ export class HsbaService {
         case 'patientBirthYear':
           where.push(eq(hsbaRequests.patientBirthYear, f.value));
           break;
+        case 'amount': {
+          // Số tiền lưu dạng chuỗi → so sánh theo số
+          const amount = Number(f.value);
+          if (!Number.isFinite(amount)) break;
+          const numeric = sql`coalesce(nullif(regexp_replace(${hsbaRequests.amount}, '[^0-9.-]', '', 'g'), ''), '0')::numeric`;
+          if (f.op === 'gte') where.push(sql`${numeric} >= ${amount}`);
+          else if (f.op === 'gt') where.push(sql`${numeric} > ${amount}`);
+          else if (f.op === 'lte') where.push(sql`${numeric} <= ${amount}`);
+          else if (f.op === 'lt') where.push(sql`${numeric} < ${amount}`);
+          else if (f.op === 'ne') where.push(sql`${numeric} <> ${amount}`);
+          else where.push(sql`${numeric} = ${amount}`);
+          break;
+        }
+        case 'doiTuong':
+          where.push(eq(hsbaRequests.doiTuong, f.value));
+          break;
         case 'returnCount':
           where.push(
             f.op === 'gt'
@@ -575,6 +591,9 @@ export class HsbaService {
       .from(hsbaRequests)
       .where(condition);
 
+    /** Biểu thức số tiền (cột lưu dạng chuỗi nên phải đổi sang số khi sắp xếp) */
+    const amountExpr = sql`coalesce(nullif(regexp_replace(${hsbaRequests.amount}, '[^0-9.-]', '', 'g'), ''), '0')::numeric`;
+
     const sortColumn = (() => {
       switch (query.sortBy) {
         case 'patientName':
@@ -587,6 +606,10 @@ export class HsbaService {
           return hsbaRequests.updatedAt;
         case 'ngayVaoVien':
           return hsbaRequests.ngayVaoVien;
+        case 'amount':
+          return amountExpr;
+        case 'returnCount':
+          return hsbaRequests.returnCount;
         default:
           return hsbaRequests.createdAt;
       }
