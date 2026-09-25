@@ -68,6 +68,15 @@ danh sách khoa chưa nhập số liệu trong kỳ.
 3. Người có quyền duyệt bấm **Duyệt** rồi **Khoá** để chốt chính thức. Số liệu của bản
    chốt **không thay đổi** khi số liệu nhập về sau bị sửa.
 
+### Xem lại và mở khoá bản chốt
+
+* Danh sách bản chốt nằm ngay dưới nút **Chốt số liệu kỳ này** ở **Báo cáo**.
+* Bấm **Xem** để mở lại đúng số liệu tại thời điểm chốt (bảng thu gọn, tô màu trạng thái).
+* Bấm **Mở khoá** để đưa bản chốt về *Đã duyệt* và cho phép nhập tiếp. Việc mở khoá cần
+  quyền `report.snapshot.lock` (hoặc quản trị tối cao) và luôn được ghi vào nhật ký hệ
+  thống với thao tác `UNLOCK`. Khi bản chốt còn *Đã khoá*, ô nhập số liệu của kỳ đó bị
+  chặn kèm cảnh báo màu vàng — tránh sửa nhầm số đã báo cáo.
+
 ## 6. Trưởng khoa / Ban giám đốc
 
 * **Bảng điều khiển**: số phiếu theo trạng thái, số phiếu bị trả lại, tình hình nhập
@@ -99,6 +108,19 @@ vai trò phù hợp. Menu **Tiện ích** hiển thị theo cấu hình *Quản 
 `hong anh`), tìm được theo số phiếu, mã KCB, mã thẻ BHYT, tên người bệnh, khoa.
 Bấm **Bộ lọc nâng cao** để lọc theo khoa, mức ưu tiên, đối tượng, khoảng số tiền,
 phiếu đã bị trả lại và chọn kiểu sắp xếp.
+
+**Lọc sâu theo từng trường thế nào?** Trong bảng *Bộ lọc nâng cao* còn có mục **Bộ lọc
+nâng cao** (dạng điều kiện): chọn *trường* → *điều kiện* (bằng, khác, chứa, từ … trở lên,
+thuộc danh sách, rỗng/có giá trị…) → *giá trị*, rồi bấm **Áp dụng**. Danh sách trường,
+kiểu dữ liệu và danh mục giá trị do hệ thống tự cung cấp (API `/api/meta/filters`), nên
+mọi màn hình đều có cùng cách lọc. Bấm **Lưu bộ lọc** để đặt tên và dùng lại bộ điều kiện
+này về sau. Các màn *Người dùng*, *Tiện ích*, *Mẫu in*, *Nhật ký* cũng có thanh lọc này.
+
+**Thiết kế bản in ở đâu?** Vào **Quản trị → Mẫu in**, bấm **Thiết kế** ở một mẫu: màn
+thiết kế cho phép kéo thả từng phần tử theo milimét, chỉnh khổ giấy/lề/lưới, font và kiểu
+chữ, khung viền – nền, bảng động (thêm cột, nguồn dữ liệu, dòng tổng), nhiều trang, chữ
+mờ, đánh số trang và liên kết dữ liệu cho từng ô; bấm **Xem trước PDF** để kiểm tra ngay.
+Nút **Thiết kế trống** tạo bố cục mới; tab **JSON** cho phép xem/sao lưu/nạp thiết kế.
 
 **Bản in bị lệch/thiếu chữ?** Kiểm tra *Quản trị → Mẫu in*: khổ giấy, lề và font
 (Tinos/Times hỗ trợ đầy đủ tiếng Việt). Bản in được kết xuất theo đúng mẫu đang ban hành.
