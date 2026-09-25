@@ -14,6 +14,35 @@ Docker Compose, cách sao lưu và nâng cấp.
 
 ## 2. Cài đặt
 
+### 2.1. Một lệnh (khuyến nghị)
+
+Script `deploy/install.sh` cài trọn gói: tự cài Docker nếu thiếu, sinh `.env`
+với bí mật ngẫu nhiên, dựng hệ thống và **tự kiểm tra** (health, đăng nhập,
+proxy web → API) rồi in kết luận OK hay chưa:
+
+```bash
+# Đã clone mã nguồn:
+git clone https://github.com/pvminh94/qlbv.git /opt/qlbs && cd /opt/qlbs
+sudo bash deploy/install.sh
+
+# Hoặc dán nguyên câu lệnh này vào VPS (tự tải mã nguồn về /opt/qlbs):
+curl -fsSL https://raw.githubusercontent.com/pvminh94/qlbv/main/deploy/install.sh | sudo bash -s --
+```
+
+Một số tùy chọn hay dùng:
+
+```bash
+sudo bash deploy/install.sh --demo                 # thêm dữ liệu mẫu để xem giao diện
+sudo bash deploy/install.sh --web-port 8080        # đổi cổng giao diện
+sudo bash deploy/install.sh --domain qlbs.benhvien.vn   # khi đã có HTTPS
+sudo bash deploy/install.sh --admin-pass 'MK-cua-ban'   # tự chọn mật khẩu admin
+```
+
+Tài khoản quản trị và địa chỉ truy cập được in ra cuối script (lưu sẵn trong
+`data/thong-tin-dang-nhap.txt`). Script idempotent — chạy lại nhiều lần vẫn an toàn.
+
+### 2.2. Cài thủ công từng bước
+
 ```bash
 # 1) Lấy mã nguồn
 git clone <địa-chỉ-kho> /opt/qlbs && cd /opt/qlbs
@@ -45,7 +74,8 @@ chạy lại nhiều lần vẫn an toàn) rồi mới mở cổng 4000.
 
 ## 3. Dùng sau proxy và tên miền (HTTPS)
 
-Ví dụ Nginx đặt trước hệ thống:
+Mẫu cấu hình Nginx đầy đủ (gồm cả chuyển hướng 80 → 443):
+[deploy/nginx/qlbs.conf.example](../deploy/nginx/qlbs.conf.example)
 
 ```nginx
 server {

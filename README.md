@@ -62,6 +62,10 @@ qlbs/
 ### 4.1. Bằng Docker (khuyến nghị)
 
 ```bash
+# Cài trọn gói trên VPS bằng MỘT lệnh (tự cài Docker, sinh .env, tự kiểm tra):
+sudo bash deploy/install.sh
+
+# Hoặc cài tay:
 cp .env.example .env          # sửa mật khẩu trước khi dùng thật
 docker compose up -d --build
 ```
