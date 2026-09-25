@@ -8,6 +8,7 @@ import { DbService } from '../../db/db.service';
 import { utilities } from '../../db/schema';
 import type { Utility } from '../../db/schema/ops';
 import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
 import { CacheService } from '../../infra/cache/cache.service';
 import type { AccessContext } from '../../common/types/access-context';
 
@@ -31,6 +32,13 @@ export interface CreateUtilityDto {
 
 export type UpdateUtilityDto = Partial<CreateUtilityDto>;
 
+/** Trường lọc nâng cao của danh sách tiện ích. */
+const UTILITY_FILTERS: Record<string, FilterTarget> = {
+  kind: { expr: utilities.kind, type: 'text' },
+  placement: { expr: utilities.placement, type: 'text' },
+  active: { expr: utilities.active, type: 'bool' },
+};
+
 @Injectable()
 export class UtilitiesService {
   constructor(
@@ -49,11 +57,7 @@ export class UtilitiesService {
       const like = `%${query.q.trim()}%`;
       where.push(or(ilike(utilities.name, like), ilike(utilities.code, like), ilike(utilities.description, like)) as SQL);
     }
-    for (const f of parseFilters(query.filters)) {
-      if (f.field === 'kind') where.push(eq(utilities.kind, f.value as 'BUILTIN'));
-      if (f.field === 'placement') where.push(eq(utilities.placement, f.value));
-      if (f.field === 'active') where.push(eq(utilities.active, f.value === 'true'));
-    }
+    pushFilters(where, parseFilters(query.filters), UTILITY_FILTERS);
     const condition = where.length ? and(...where) : undefined;
 
     const [countRow] = await this.db.db

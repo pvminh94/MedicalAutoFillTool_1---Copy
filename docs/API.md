@@ -1,6 +1,6 @@
 # Danh mục API — QLBS
 
-Tổng **124** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, ví dụ `GET /api/hsba/requests`. Cột **Quyền** là (các) mã quyền cần có — nhiều mã cách nhau bởi `|` nghĩa là chỉ cần một trong số đó; quản trị tối cao (`SUPER_ADMIN`) bỏ qua mọi kiểm tra. Xem [PHAN-QUYEN.md](PHAN-QUYEN.md).
+Tổng **126** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, ví dụ `GET /api/hsba/requests`. Cột **Quyền** là (các) mã quyền cần có — nhiều mã cách nhau bởi `|` nghĩa là chỉ cần một trong số đó; quản trị tối cao (`SUPER_ADMIN`) bỏ qua mọi kiểm tra. Xem [PHAN-QUYEN.md](PHAN-QUYEN.md).
 
 > Tài liệu tương tác (Swagger UI): `http://<máy chủ>:4000/api/docs`
 
@@ -10,6 +10,7 @@ Tổng **124** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 - Danh sách dùng chung tham số: `page`, `pageSize`, `q`, `sortBy`, `sortDir`, `filters`, `dateField`, `dateFrom`, `dateTo`, `all`.
 - `filters` có dạng `field:op:value`, nhiều điều kiện cách nhau bởi dấu phẩy, `op ∈ eq,ne,gt,gte,lt,lte,like,in,nin,isnull,notnull` (ví dụ `status:eq:HOAN_TAT,priority:in:HIGH|NORMAL`).
 - Tham số boolean trên URL nhận `true/false/1/0/on/yes`.
+- Danh sách trường lọc hợp lệ của từng màn hình lấy từ `GET /api/meta/filters[/:resource]` — giao diện tự dựng bộ lọc nâng cao từ dữ liệu này.
 
 ## Nhật ký hệ thống
 
@@ -195,3 +196,11 @@ Tổng **124** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 | `PATCH` | `/utilities/reorder` | Sắp xếp thứ tự tiện ích | `utility.update` |
 | `DELETE` | `/utilities/:id` | Xoá tiện ích | `utility.delete` |
 
+## Siêu dữ liệu bộ lọc nâng cao
+
+| Phương thức | Đường dẫn | Mô tả | Quyền |
+|---|---|---|---|
+| `GET` | `/meta/filters` | Danh sách tài nguyên hỗ trợ lọc nâng cao và toán tử kèm nhãn tiếng Việt | — |
+| `GET` | `/meta/filters/:resource` | Trường lọc, kiểu dữ liệu, toán tử và nguồn giá trị của một tài nguyên | — |
+
+Tài nguyên hỗ trợ: `hsba`, `report-entries`, `print-templates`, `users`, `roles`, `departments`, `utilities`, `audit`.

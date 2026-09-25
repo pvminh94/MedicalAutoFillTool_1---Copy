@@ -29,6 +29,7 @@ import {
 } from '../../db/schema';
 import { REQUEST_STATUS_LABELS } from '../../db/schema/types';
 import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
 import type { AccessContext, ClientMeta } from '../../common/types/access-context';
 import { PrintingService } from '../printing/printing.service';
 import { CacheService } from '../../infra/cache/cache.service';
@@ -53,6 +54,32 @@ const SEARCH_FIELDS = [
   'departmentName',
   'patientCode',
 ] as const;
+
+/** Biểu thức số cho cột số tiền (lưu dạng chuỗi) — dùng chung cho lọc và sắp xếp */
+const AMOUNT_NUMERIC = sql`coalesce(nullif(regexp_replace(${hsbaRequests.amount}, '[^0-9.-]', '', 'g'), ''), '0')::numeric`;
+
+/**
+ * Trường lọc nâng cao của danh sách phiếu (khớp với sổ đăng ký trường lọc ở
+ * `common/filters/filter-registry.ts` — thêm trường mới thì khai báo ở cả hai nơi).
+ */
+const HSBA_FILTERS: Record<string, FilterTarget> = {
+  code: { expr: hsbaRequests.code, type: 'text' },
+  patientName: { expr: hsbaRequests.patientName, type: 'text' },
+  maKcb: { expr: hsbaRequests.maKcb, type: 'text' },
+  maTheBhyt: { expr: hsbaRequests.maTheBhyt, type: 'text' },
+  patientGender: { expr: hsbaRequests.patientGender, type: 'text' },
+  patientBirthYear: { expr: sql`nullif(${hsbaRequests.patientBirthYear}, '')::int`, type: 'number' },
+  status: { expr: hsbaRequests.status, type: 'enum' },
+  priority: { expr: hsbaRequests.priority, type: 'enum' },
+  departmentId: { expr: hsbaRequests.departmentId, type: 'number' },
+  workflowId: { expr: hsbaRequests.workflowId, type: 'number' },
+  pendingStepKey: { expr: hsbaRequests.pendingStepKey, type: 'text' },
+  returnCount: { expr: hsbaRequests.returnCount, type: 'number' },
+  amount: { expr: AMOUNT_NUMERIC, type: 'number' },
+  doiTuong: { expr: hsbaRequests.doiTuong, type: 'text' },
+  createdBy: { expr: hsbaRequests.createdBy, type: 'number' },
+  requesterId: { expr: hsbaRequests.requesterId, type: 'number' },
+};
 
 function makeCode(prefix: string, id: number): string {
   return `${prefix}-${String(id).padStart(4, '0')}`;
@@ -478,99 +505,9 @@ export class HsbaService {
       if (query.dateTo) where.push(sql`${column} < (${query.dateTo}::date + interval '1 day')`);
     }
 
-    // Bộ lọc nâng cao field:op:value
-    for (const f of parseFilters(query.filters)) {
-      const map: Record<string, ReturnType<typeof eq>> = {};
-      void map;
-      switch (f.field) {
-        case 'status':
-          where.push(f.op === 'ne' ? sql`${hsbaRequests.status} <> ${f.value}` : eq(hsbaRequests.status, f.value));
-          break;
-        case 'priority':
-          where.push(eq(hsbaRequests.priority, f.value));
-          break;
-        case 'patientName':
-          where.push(ilike(hsbaRequests.patientName, `%${f.value}%`));
-          break;
-        case 'maKcb':
-          where.push(ilike(hsbaRequests.maKcb, `%${f.value}%`));
-          break;
-        case 'maTheBhyt':
-          where.push(ilike(hsbaRequests.maTheBhyt, `%${f.value}%`));
-          break;
-        case 'code':
-          where.push(ilike(hsbaRequests.code, `%${f.value}%`));
-          break;
-        case 'departmentId':
-          where.push(eq(hsbaRequests.departmentId, Number(f.value)));
-          break;
-        case 'requesterId':
-          where.push(eq(hsbaRequests.requesterId, Number(f.value)));
-          break;
-        case 'createdBy':
-          where.push(eq(hsbaRequests.createdBy, Number(f.value)));
-          break;
-        case 'workflowId':
-          where.push(eq(hsbaRequests.workflowId, Number(f.value)));
-          break;
-        case 'pendingStepKey':
-          where.push(eq(hsbaRequests.pendingStepKey, f.value));
-          break;
-        case 'amount': {
-          // Số tiền lưu dạng chuỗi → so sánh bằng số (dùng cho lọc của tài chính)
-          const amount = Number(f.value);
-          if (!Number.isFinite(amount)) break;
-          const numeric = sql`coalesce(nullif(regexp_replace(${hsbaRequests.amount}, '[^0-9.-]', '', 'g'), ''), '0')::numeric`;
-          if (f.op === 'gte' || f.op === 'gt' || f.op === 'lte' || f.op === 'lt' || f.op === 'ne') {
-            const operators: Record<string, SQL> = {
-              gte: sql`${numeric} >= ${amount}`,
-              gt: sql`${numeric} > ${amount}`,
-              lte: sql`${numeric} <= ${amount}`,
-              lt: sql`${numeric} < ${amount}`,
-              ne: sql`${numeric} <> ${amount}`,
-            };
-            where.push(operators[f.op]);
-          } else {
-            where.push(sql`${numeric} = ${amount}`);
-          }
-          break;
-        }
-        case 'doiTuong':
-          where.push(eq(hsbaRequests.doiTuong, f.value));
-          break;
-        case 'patientGender':
-          where.push(eq(hsbaRequests.patientGender, f.value));
-          break;
-        case 'patientBirthYear':
-          where.push(eq(hsbaRequests.patientBirthYear, f.value));
-          break;
-        case 'amount': {
-          // Số tiền lưu dạng chuỗi → so sánh theo số
-          const amount = Number(f.value);
-          if (!Number.isFinite(amount)) break;
-          const numeric = sql`coalesce(nullif(regexp_replace(${hsbaRequests.amount}, '[^0-9.-]', '', 'g'), ''), '0')::numeric`;
-          if (f.op === 'gte') where.push(sql`${numeric} >= ${amount}`);
-          else if (f.op === 'gt') where.push(sql`${numeric} > ${amount}`);
-          else if (f.op === 'lte') where.push(sql`${numeric} <= ${amount}`);
-          else if (f.op === 'lt') where.push(sql`${numeric} < ${amount}`);
-          else if (f.op === 'ne') where.push(sql`${numeric} <> ${amount}`);
-          else where.push(sql`${numeric} = ${amount}`);
-          break;
-        }
-        case 'doiTuong':
-          where.push(eq(hsbaRequests.doiTuong, f.value));
-          break;
-        case 'returnCount':
-          where.push(
-            f.op === 'gt'
-              ? sql`${hsbaRequests.returnCount} > ${Number(f.value)}`
-              : eq(hsbaRequests.returnCount, Number(f.value)),
-          );
-          break;
-        default:
-          break;
-      }
-    }
+    // Bộ lọc nâng cao field:op:value — khai báo trường ở HSBA_FILTERS, toán tử do pushFilters lo
+    pushFilters(where, parseFilters(query.filters), HSBA_FILTERS);
+
     return where;
   }
 

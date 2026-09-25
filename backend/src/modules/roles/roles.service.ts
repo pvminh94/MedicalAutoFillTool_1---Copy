@@ -16,6 +16,7 @@ import { DbService } from '../../db/db.service';
 import { permissions, rolePermissions, roles, userRoles, users } from '../../db/schema';
 import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { SUPER_ADMIN_ROLE } from '../../common/types/access-context';
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
 import { CacheService } from '../../infra/cache/cache.service';
 import { AuthService } from '../auth/auth.service';
 
@@ -34,6 +35,13 @@ export interface CreateRoleDto {
 
 export type UpdateRoleDto = Partial<CreateRoleDto>;
 
+/** Trường lọc nâng cao của danh sách vai trò. */
+const ROLE_FILTERS: Record<string, FilterTarget> = {
+  dataScope: { expr: roles.dataScope, type: 'text' },
+  isSystem: { expr: roles.isSystem, type: 'bool' },
+  active: { expr: roles.active, type: 'bool' },
+};
+
 @Injectable()
 export class RolesService {
   constructor(
@@ -49,11 +57,7 @@ export class RolesService {
       where.push(or(ilike(roles.name, like), ilike(roles.code, like), ilike(roles.description, like)) as SQL);
     }
     if (query.activeOnly) where.push(eq(roles.active, true));
-    for (const f of parseFilters(query.filters)) {
-      if (f.field === 'dataScope') where.push(eq(roles.dataScope, f.value as 'OWN' | 'DEPT' | 'ALL'));
-      if (f.field === 'isSystem') where.push(eq(roles.isSystem, f.value === 'true'));
-      if (f.field === 'active') where.push(eq(roles.active, f.value === 'true'));
-    }
+    pushFilters(where, parseFilters(query.filters), ROLE_FILTERS);
     const condition = where.length ? and(...where) : undefined;
 
     const [countRow] = await this.db.db

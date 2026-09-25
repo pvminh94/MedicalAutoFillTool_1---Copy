@@ -39,6 +39,15 @@ export interface DepartmentNode {
 
 const CACHE_KEY = 'dept:all';
 
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
+/** Trường lọc nâng cao của danh sách khoa/phòng. */
+const DEPARTMENT_FILTERS: Record<string, FilterTarget> = {
+  code: { expr: departments.code, type: 'text' },
+  name: { expr: departments.name, type: 'text' },
+  kind: { expr: departments.kind, type: 'text' },
+  active: { expr: departments.active, type: 'bool' },
+};
+
 @Injectable()
 export class DepartmentsService {
   constructor(
@@ -72,24 +81,7 @@ export class DepartmentsService {
     if (query.departmentIds?.length) {
       where.push(inArray(departments.id, query.departmentIds.map(Number)));
     }
-    for (const f of parseFilters(query.filters)) {
-      switch (f.field) {
-        case 'kind':
-          where.push(eq(departments.kind, f.value));
-          break;
-        case 'active':
-          where.push(eq(departments.active, f.value === 'true'));
-          break;
-        case 'code':
-          where.push(ilike(departments.code, `%${f.value}%`));
-          break;
-        case 'name':
-          where.push(ilike(departments.name, `%${f.value}%`));
-          break;
-        default:
-          break;
-      }
-    }
+    pushFilters(where, parseFilters(query.filters), DEPARTMENT_FILTERS);
     const condition = where.length ? and(...where) : undefined;
 
     const [countRow] = await this.db.db

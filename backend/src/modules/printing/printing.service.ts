@@ -17,6 +17,8 @@ import { printTemplateVersions, printTemplates } from '../../db/schema';
 import type { PrintDocument } from '../../db/schema/printing';
 import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { renderPrintDocument, type RenderContext } from '../../infra/rendering/pdf-renderer';
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
+
 import type { AccessContext } from '../../common/types/access-context';
 
 export interface PrintTemplateInput {
@@ -35,6 +37,15 @@ export interface PrintTemplateInput {
   /** Ghi chú phiên bản khi lưu */
   versionNote?: string;
 }
+
+/** Trường lọc nâng cao của danh sách mẫu in. */
+const PRINT_FILTERS: Record<string, FilterTarget> = {
+  module: { expr: printTemplates.module, type: 'text' },
+  docType: { expr: printTemplates.docType, type: 'text' },
+  paperSize: { expr: printTemplates.paperSize, type: 'text' },
+  active: { expr: printTemplates.active, type: 'bool' },
+  departmentId: { expr: printTemplates.departmentId, type: 'number' },
+};
 
 @Injectable()
 export class PrintingService {
@@ -56,27 +67,7 @@ export class PrintingService {
       );
     }
     if (query.activeOnly) where.push(eq(printTemplates.active, true));
-    for (const f of parseFilters(query.filters)) {
-      switch (f.field) {
-        case 'module':
-          where.push(eq(printTemplates.module, f.value as 'HSBA'));
-          break;
-        case 'docType':
-          where.push(eq(printTemplates.docType, f.value));
-          break;
-        case 'paperSize':
-          where.push(eq(printTemplates.paperSize, f.value));
-          break;
-        case 'active':
-          where.push(eq(printTemplates.active, f.value === 'true'));
-          break;
-        case 'departmentId':
-          where.push(eq(printTemplates.departmentId, Number(f.value)));
-          break;
-        default:
-          break;
-      }
-    }
+    pushFilters(where, parseFilters(query.filters), PRINT_FILTERS);
     const condition = where.length ? and(...where) : undefined;
 
     const [countRow] = await this.db.db

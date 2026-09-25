@@ -36,6 +36,15 @@ import type {
 
 const DEFAULT_RESET_PASSWORD = 'Qlbs@123456';
 
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
+/** Trường lọc nâng cao của danh sách người dùng. */
+const USER_FILTERS: Record<string, FilterTarget> = {
+  username: { expr: users.username, type: 'text' },
+  fullName: { expr: users.fullName, type: 'text' },
+  title: { expr: users.title, type: 'text' },
+  active: { expr: users.active, type: 'bool' },
+};
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -65,24 +74,7 @@ export class UsersService {
         ) as SQL,
       );
     }
-    for (const f of parseFilters(query.filters)) {
-      switch (f.field) {
-        case 'active':
-          where.push(eq(users.active, f.value === 'true'));
-          break;
-        case 'title':
-          where.push(ilike(users.title, `%${f.value}%`));
-          break;
-        case 'username':
-          where.push(ilike(users.username, `%${f.value}%`));
-          break;
-        case 'fullName':
-          where.push(ilike(users.fullName, `%${f.value}%`));
-          break;
-        default:
-          break;
-      }
-    }
+    pushFilters(where, parseFilters(query.filters), USER_FILTERS);
 
     if (query.roleCode) {
       const sub = this.db.db

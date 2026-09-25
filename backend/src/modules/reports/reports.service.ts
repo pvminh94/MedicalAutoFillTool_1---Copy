@@ -33,6 +33,7 @@ import {
   type AggMode,
 } from '../../db/schema';
 import { buildPage, type Paginated, parseFilters } from '../../common/dto/query.dto';
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
 import { evaluateFormula, formulaRefs } from '../../common/utils/formula.util';
 import { resolvePeriod, eachDay, today } from '../../common/utils/date.util';
 import type { AccessContext } from '../../common/types/access-context';
@@ -130,6 +131,14 @@ function formatCell(value: number, format: string | undefined): string {
       return value.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
   }
 }
+
+/** Trường lọc nâng cao của nhật ký sửa số liệu báo cáo. */
+const ENTRY_AUDIT_FILTERS: Record<string, FilterTarget> = {
+  rowId: { expr: reportEntryAudits.rowId, type: 'number' },
+  colKey: { expr: reportEntryAudits.colKey, type: 'text' },
+  action: { expr: reportEntryAudits.action, type: 'text' },
+  userId: { expr: reportEntryAudits.userId, type: 'number' },
+};
 
 @Injectable()
 export class ReportsService {
@@ -955,24 +964,7 @@ export class ReportsService {
     if (query.templateId) where.push(eq(reportEntryAudits.templateId, query.templateId));
     if (query.dateFrom) where.push(sql`${reportEntryAudits.entryDate} >= ${query.dateFrom}`);
     if (query.dateTo) where.push(sql`${reportEntryAudits.entryDate} <= ${query.dateTo}`);
-    for (const f of parseFilters(query.filters)) {
-      switch (f.field) {
-        case 'rowId':
-          where.push(eq(reportEntryAudits.rowId, Number(f.value)));
-          break;
-        case 'colKey':
-          where.push(eq(reportEntryAudits.colKey, f.value));
-          break;
-        case 'userId':
-          where.push(eq(reportEntryAudits.userId, Number(f.value)));
-          break;
-        case 'action':
-          where.push(eq(reportEntryAudits.action, f.value));
-          break;
-        default:
-          break;
-      }
-    }
+    pushFilters(where, parseFilters(query.filters), ENTRY_AUDIT_FILTERS);
     const condition = where.length ? and(...where) : undefined;
 
     const [countRow] = await this.db.db

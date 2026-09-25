@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState } from 'react';
+import { AdvancedFilter } from '@/components/shared/advanced-filter';
 import { PageHeader, StatCard } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
@@ -107,6 +108,8 @@ function RequestsContent() {
   const [doiTuong, setDoiTuong] = useState('');
   const [returnedOnly, setReturnedOnly] = useState(false);
   const [sortBy, setSortBy] = useState('createdAt');
+  /** Bộ lọc sâu dựng từ /meta/filters/hsba (chuỗi field:op:value) */
+  const [deepFilters, setDeepFilters] = useState('');
 
   const { data: departmentOptions } = useQuery({
     queryKey: ['departments-options'],
@@ -131,6 +134,9 @@ function RequestsContent() {
     returnedOnly ? 'x' : '',
   ].filter(Boolean).length;
 
+  /** Số điều kiện của bộ lọc sâu (dùng chung với thanh lọc nâng cao) */
+  const deepCount = deepFilters ? deepFilters.split(',').filter(Boolean).length : 0;
+
   const clearAdvanced = (): void => {
     setDepartmentId('');
     setPriority('');
@@ -138,6 +144,7 @@ function RequestsContent() {
     setAmountTo('');
     setDoiTuong('');
     setReturnedOnly(false);
+    setDeepFilters('');
     setPage(1);
   };
 
@@ -159,9 +166,10 @@ function RequestsContent() {
     if (amountFrom) filters.push(`amount:gte:${amountFrom}`);
     if (amountTo) filters.push(`amount:lte:${amountTo}`);
     if (returnedOnly) filters.push('returnCount:gt:0');
+    if (deepFilters) filters.push(deepFilters);
     if (filters.length) p.set('filters', filters.join(','));
     return p.toString();
-  }, [page, search, status, myTurn, mine, dateFrom, dateTo, departmentId, priority, amountFrom, amountTo, doiTuong, returnedOnly, sortBy]);
+  }, [page, search, status, myTurn, mine, dateFrom, dateTo, departmentId, priority, amountFrom, amountTo, doiTuong, returnedOnly, sortBy, deepFilters]);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['hsba-requests', query],
@@ -280,8 +288,10 @@ function RequestsContent() {
             onClick={() => setShowAdvanced((v) => !v)}
           >
             <Filter /> Bộ lọc nâng cao
-            {advancedCount > 0 ? (
-              <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-semibold">{advancedCount}</span>
+            {advancedCount + deepCount > 0 ? (
+              <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-semibold">
+                {advancedCount + deepCount}
+              </span>
             ) : null}
           </Button>
           <Button variant="outline" size="sm" onClick={() => refetch()} title="Tải lại">
@@ -348,9 +358,25 @@ function RequestsContent() {
               Chỉ phiếu đã bị trả lại
             </label>
             <div className="flex items-end">
-              <Button variant="ghost" size="sm" onClick={clearAdvanced} disabled={advancedCount === 0}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAdvanced}
+                disabled={advancedCount + deepCount === 0}
+              >
                 <X /> Xoá bộ lọc nâng cao
               </Button>
+            </div>
+            {/* Bộ lọc sâu: trường lấy từ /meta/filters/hsba, có lưu bộ lọc dùng lại */}
+            <div className="sm:col-span-2 xl:col-span-3">
+              <AdvancedFilter
+                resource="hsba"
+                value={deepFilters}
+                onChange={(next) => {
+                  setDeepFilters(next);
+                  setPage(1);
+                }}
+              />
             </div>
           </div>
         ) : null}

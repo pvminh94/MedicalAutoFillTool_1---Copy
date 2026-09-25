@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { FiltersModule } from './common/filters/filters.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
@@ -55,6 +56,7 @@ const envFile = [
     DepartmentsModule,
     SettingsModule,
     UtilitiesModule,
+    FiltersModule,
     SchedulerModule,
     // Phân hệ nghiệp vụ
     PrintingModule,

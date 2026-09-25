@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Download, Filter, History, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { AdvancedFilter } from '@/components/shared/advanced-filter';
 import { PageHeader, StatCard } from '@/components/shared/page-header';
 import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -74,6 +75,8 @@ export default function AuditPage() {
   const [action, setAction] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  /** Bộ lọc sâu theo trường (lấy cấu hình từ /meta/filters/audit) */
+  const [deepFilters, setDeepFilters] = useState('');
 
   const params = useMemo(() => {
     const p = new URLSearchParams();
@@ -83,11 +86,12 @@ export default function AuditPage() {
     const filters: string[] = [];
     if (module) filters.push(`module:eq:${module}`);
     if (action) filters.push(`action:eq:${action}`);
+    if (deepFilters) filters.push(deepFilters);
     if (filters.length) p.set('filters', filters.join(','));
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo) p.set('dateTo', dateTo);
     return p.toString();
-  }, [page, search, module, action, dateFrom, dateTo]);
+  }, [page, search, module, action, dateFrom, dateTo, deepFilters]);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['audit', params],
@@ -191,6 +195,7 @@ export default function AuditPage() {
               setAction('');
               setDateFrom('');
               setDateTo('');
+              setDeepFilters('');
               setPage(1);
             }}
           >
@@ -212,6 +217,18 @@ export default function AuditPage() {
             >
               <Download />
             </Button>
+          </div>
+
+          {/* Lọc sâu theo từng trường: trường lấy từ /meta/filters/audit, có lưu bộ lọc */}
+          <div className="w-full">
+            <AdvancedFilter
+              resource="audit"
+              value={deepFilters}
+              onChange={(next) => {
+                setDeepFilters(next);
+                setPage(1);
+              }}
+            />
           </div>
         </div>
 

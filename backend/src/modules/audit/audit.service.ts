@@ -23,6 +23,16 @@ export interface AuditEntry {
 /**
  * Nhật ký kiểm toán — mọi thao tác ghi đều để lại vết: ai, làm gì, khi nào, từ đâu.
  */
+import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
+/** Trường lọc nâng cao của nhật ký hệ thống (khớp sổ đăng ký trường lọc). */
+const AUDIT_FILTERS: Record<string, FilterTarget> = {
+  module: { expr: auditLogs.module, type: 'text' },
+  action: { expr: auditLogs.action, type: 'text' },
+  entity: { expr: auditLogs.entity, type: 'text' },
+  username: { expr: auditLogs.username, type: 'text' },
+  userId: { expr: auditLogs.userId, type: 'number' },
+};
+
 @Injectable()
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
@@ -67,27 +77,7 @@ export class AuditService {
         ) as SQL,
       );
     }
-    for (const f of parseFilters(query.filters)) {
-      switch (f.field) {
-        case 'module':
-          where.push(eq(auditLogs.module, f.value));
-          break;
-        case 'action':
-          where.push(eq(auditLogs.action, f.value));
-          break;
-        case 'username':
-          where.push(ilike(auditLogs.username, `%${f.value}%`));
-          break;
-        case 'entity':
-          where.push(eq(auditLogs.entity, f.value));
-          break;
-        case 'userId':
-          where.push(eq(auditLogs.userId, Number(f.value)));
-          break;
-        default:
-          break;
-      }
-    }
+    pushFilters(where, parseFilters(query.filters), AUDIT_FILTERS);
     if (query.dateFrom) {
       const col = query.dateField === 'createdAt' || !query.dateField ? auditLogs.createdAt : auditLogs.createdAt;
       where.push(gte(col, new Date(`${query.dateFrom}T00:00:00`)));
