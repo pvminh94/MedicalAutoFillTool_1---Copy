@@ -15,7 +15,7 @@ import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-or
 import { DbService } from '../../db/db.service';
 import { printTemplateVersions, printTemplates } from '../../db/schema';
 import type { PrintDocument } from '../../db/schema/printing';
-import { buildPage, type AdvancedQueryDto, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { renderPrintDocument, type RenderContext } from '../../infra/rendering/pdf-renderer';
 import type { AccessContext } from '../../common/types/access-context';
 
@@ -56,7 +56,7 @@ export class PrintingService {
       );
     }
     if (query.activeOnly) where.push(eq(printTemplates.active, true));
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       switch (f.field) {
         case 'module':
           where.push(eq(printTemplates.module, f.value as 'HSBA'));

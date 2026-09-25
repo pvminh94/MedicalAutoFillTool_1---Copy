@@ -14,7 +14,7 @@ import {
 import { and, asc, desc, eq, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { permissions, rolePermissions, roles, userRoles, users } from '../../db/schema';
-import { buildPage, type AdvancedQueryDto, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { SUPER_ADMIN_ROLE } from '../../common/types/access-context';
 import { CacheService } from '../../infra/cache/cache.service';
 import { AuthService } from '../auth/auth.service';
@@ -49,7 +49,7 @@ export class RolesService {
       where.push(or(ilike(roles.name, like), ilike(roles.code, like), ilike(roles.description, like)) as SQL);
     }
     if (query.activeOnly) where.push(eq(roles.active, true));
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       if (f.field === 'dataScope') where.push(eq(roles.dataScope, f.value as 'OWN' | 'DEPT' | 'ALL'));
       if (f.field === 'isSystem') where.push(eq(roles.isSystem, f.value === 'true'));
       if (f.field === 'active') where.push(eq(roles.active, f.value === 'true'));

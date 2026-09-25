@@ -164,24 +164,34 @@ export class AdvancedQueryDto extends PaginationQueryDto {
   includeDeleted?: boolean;
 
   parseFilters(): ParsedFilter[] {
-    if (!this.filters?.trim()) return [];
-    return this.filters
-      .split(',')
-      .map((chunk) => chunk.trim())
-      .filter(Boolean)
-      .map((chunk) => {
-        const [field = '', opRaw = 'eq', ...rest] = chunk.split(':');
-        const op = (VALID_OPS.includes(opRaw as FilterOperator) ? opRaw : 'eq') as FilterOperator;
-        const value = rest.join(':').trim();
-        return {
-          field: field.trim(),
-          op,
-          value,
-          values: value.split('|').map((v) => v.trim()).filter(Boolean),
-        };
-      })
-      .filter((f) => f.field.length > 0);
+    return parseFilters(this.filters);
   }
+}
+
+/**
+ * Phân tích chuỗi bộ lọc nâng cao `field:op:value,field2:op:value2`.
+ *
+ * Viết dạng hàm độc lập (không phụ thuộc lớp DTO) để dùng được cả khi đối tượng
+ * truy vấn bị trải sang một đối tượng mới — trường hợp này làm mất phương thức của DTO.
+ */
+export function parseFilters(input?: string | null): ParsedFilter[] {
+  if (!input?.trim()) return [];
+  return input
+    .split(',')
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      const [field = '', opRaw = 'eq', ...rest] = chunk.split(':');
+      const op = (VALID_OPS.includes(opRaw as FilterOperator) ? opRaw : 'eq') as FilterOperator;
+      const value = rest.join(':').trim();
+      return {
+        field: field.trim(),
+        op,
+        value,
+        values: value.split('|').map((v) => v.trim()).filter(Boolean),
+      };
+    })
+    .filter((f) => f.field.length > 0);
 }
 
 export class IdParamDto {

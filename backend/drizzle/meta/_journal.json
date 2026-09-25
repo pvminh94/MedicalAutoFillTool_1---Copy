@@ -22,6 +22,13 @@
       "when": 1790347549206,
       "tag": "0002_them_chi_muc_buoc_cho",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790347627043,
+      "tag": "0003_them_chi_muc_truy_van_nong",
+      "breakpoints": true
     }
   ]
 }

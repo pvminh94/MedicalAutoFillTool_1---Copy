@@ -17,7 +17,7 @@ import { config } from '../../config/env';
 import { DbService } from '../../db/db.service';
 import { jobRuns, scheduledJobs } from '../../db/schema';
 import type { JobStatus } from '../../db/schema/types';
-import { buildPage, type AdvancedQueryDto, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { CacheService } from '../../infra/cache/cache.service';
 import type { JobContext, JobHandler, JobResult } from '../../infra/queue/queue.service';
 import { QueueService } from '../../infra/queue/queue.service';
@@ -202,7 +202,7 @@ export class SchedulerService implements OnModuleInit {
         ) as SQL,
       );
     }
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       if (f.field === 'active') where.push(eq(scheduledJobs.active, f.value === 'true'));
       if (f.field === 'lastStatus') where.push(eq(scheduledJobs.lastStatus, f.value as JobStatus));
     }
@@ -262,7 +262,7 @@ export class SchedulerService implements OnModuleInit {
   async allRuns(query: AdvancedQueryDto): Promise<Paginated<Record<string, unknown>>> {
     const where: SQL[] = [];
     if (query.q?.trim()) where.push(ilike(jobRuns.jobCode, `%${query.q.trim()}%`));
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       if (f.field === 'status') where.push(eq(jobRuns.status, f.value as JobStatus));
       if (f.field === 'jobCode') where.push(eq(jobRuns.jobCode, f.value));
     }

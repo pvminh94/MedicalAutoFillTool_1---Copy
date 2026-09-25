@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { and, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { auditLogs, departments, users } from '../../db/schema';
-import { buildPage, type AdvancedQueryDto, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 
 export interface AuditEntry {
   userId?: number | null;
@@ -67,7 +67,7 @@ export class AuditService {
         ) as SQL,
       );
     }
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       switch (f.field) {
         case 'module':
           where.push(eq(auditLogs.module, f.value));

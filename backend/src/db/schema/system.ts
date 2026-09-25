@@ -58,6 +58,8 @@ export const users = pgTable(
     uniqueIndex('users_username_uq').on(t.username),
     index('users_department_idx').on(t.departmentId),
     index('users_active_idx').on(t.active),
+    // Lọc theo khoa và liệt kê tài khoản đang dùng rất thường xuyên
+    index('users_dept_idx').on(t.departmentId),
     index('users_search_idx').using(
       'gin',
       sql`to_tsvector('simple', ${t.fullName} || ' ' || ${t.username} || ' ' || ${t.title})`,
@@ -201,6 +203,9 @@ export const auditLogs = pgTable(
     index('audit_logs_user_idx').on(t.userId),
     index('audit_logs_module_idx').on(t.module),
     index('audit_logs_entity_idx').on(t.entity, t.entityId),
+    // Trang nhật ký lọc theo phân hệ/thao tác rồi xem mới nhất trước
+    index('audit_logs_module_created_idx').on(t.module, t.createdAt),
+    index('audit_logs_action_created_idx').on(t.action, t.createdAt),
   ],
 );
 

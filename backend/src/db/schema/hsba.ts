@@ -209,6 +209,8 @@ export const hsbaLogs = pgTable(
   (t) => [
     index('hsba_logs_request_idx').on(t.requestId),
     index('hsba_logs_created_idx').on(t.createdAt),
+    // Trang chi tiết đọc nhật ký theo phiếu, mới nhất trước
+    index('hsba_logs_request_created_idx').on(t.requestId, t.createdAt),
   ],
 );
 

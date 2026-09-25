@@ -20,7 +20,7 @@ import {
   userRoles,
   users,
 } from '../../db/schema';
-import { buildPage, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { SUPER_ADMIN_ROLE, type AccessContext } from '../../common/types/access-context';
 import { AuthService } from '../auth/auth.service';
 import { AuditService } from '../audit/audit.service';
@@ -65,7 +65,7 @@ export class UsersService {
         ) as SQL,
       );
     }
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       switch (f.field) {
         case 'active':
           where.push(eq(users.active, f.value === 'true'));

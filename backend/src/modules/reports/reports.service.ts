@@ -31,7 +31,7 @@ import {
   type ColumnKind,
   type AggMode,
 } from '../../db/schema';
-import { buildPage, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { evaluateFormula, formulaRefs } from '../../common/utils/formula.util';
 import { resolvePeriod, eachDay, today } from '../../common/utils/date.util';
 import type { AccessContext } from '../../common/types/access-context';
@@ -914,7 +914,7 @@ export class ReportsService {
     if (query.templateId) where.push(eq(reportEntryAudits.templateId, query.templateId));
     if (query.dateFrom) where.push(sql`${reportEntryAudits.entryDate} >= ${query.dateFrom}`);
     if (query.dateTo) where.push(sql`${reportEntryAudits.entryDate} <= ${query.dateTo}`);
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       switch (f.field) {
         case 'rowId':
           where.push(eq(reportEntryAudits.rowId, Number(f.value)));

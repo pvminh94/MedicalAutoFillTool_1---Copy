@@ -7,7 +7,7 @@ import { and, asc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { utilities } from '../../db/schema';
 import type { Utility } from '../../db/schema/ops';
-import { buildPage, type AdvancedQueryDto, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { CacheService } from '../../infra/cache/cache.service';
 import type { AccessContext } from '../../common/types/access-context';
 
@@ -49,7 +49,7 @@ export class UtilitiesService {
       const like = `%${query.q.trim()}%`;
       where.push(or(ilike(utilities.name, like), ilike(utilities.code, like), ilike(utilities.description, like)) as SQL);
     }
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       if (f.field === 'kind') where.push(eq(utilities.kind, f.value as 'BUILTIN'));
       if (f.field === 'placement') where.push(eq(utilities.placement, f.value));
       if (f.field === 'active') where.push(eq(utilities.active, f.value === 'true'));

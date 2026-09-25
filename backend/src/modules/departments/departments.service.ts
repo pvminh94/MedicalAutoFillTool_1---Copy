@@ -13,7 +13,7 @@ import {
 import { and, asc, eq, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { departments } from '../../db/schema';
-import { buildPage, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { CacheService } from '../../infra/cache/cache.service';
 import type {
   CreateDepartmentDto,
@@ -72,7 +72,7 @@ export class DepartmentsService {
     if (query.departmentIds?.length) {
       where.push(inArray(departments.id, query.departmentIds.map(Number)));
     }
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       switch (f.field) {
         case 'kind':
           where.push(eq(departments.kind, f.value));

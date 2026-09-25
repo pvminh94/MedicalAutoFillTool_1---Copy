@@ -28,7 +28,7 @@ import {
   type WorkflowStep,
 } from '../../db/schema';
 import { REQUEST_STATUS_LABELS } from '../../db/schema/types';
-import { buildPage, type AdvancedQueryDto, type Paginated } from '../../common/dto/query.dto';
+import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import type { AccessContext, ClientMeta } from '../../common/types/access-context';
 import { PrintingService } from '../printing/printing.service';
 import { CacheService } from '../../infra/cache/cache.service';
@@ -479,7 +479,7 @@ export class HsbaService {
     }
 
     // Bộ lọc nâng cao field:op:value
-    for (const f of query.parseFilters()) {
+    for (const f of parseFilters(query.filters)) {
       const map: Record<string, ReturnType<typeof eq>> = {};
       void map;
       switch (f.field) {
@@ -687,7 +687,9 @@ export class HsbaService {
   /** Phiếu đang chờ chính người dùng hiện tại xử lý */
   /** Phiếu đang chờ chính tôi xử lý — dùng chung điều kiện với bộ lọc myTurn của danh sách. */
   async myTurn(user: AccessContext, query: RequestQueryDto): Promise<Paginated<Record<string, unknown>>> {
-    return this.list({ ...query, myTurn: true } as RequestQueryDto, user);
+    // Giữ nguyên đối tượng DTO (không trải sang đối tượng mới) rồi bật cờ myTurn
+    query.myTurn = true;
+    return this.list(query, user);
   }
 
   async findOne(id: number, user?: AccessContext) {
