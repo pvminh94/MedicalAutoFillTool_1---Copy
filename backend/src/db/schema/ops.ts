@@ -91,6 +91,7 @@ export const scheduledJobs = pgTable(
   (t) => [
     uniqueIndex('scheduled_jobs_code_uq').on(t.code),
     index('scheduled_jobs_active_idx').on(t.active),
+    index('scheduled_jobs_next_run_idx').on(t.active, t.nextRunAt),
   ],
 );
 

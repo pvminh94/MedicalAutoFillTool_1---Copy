@@ -267,6 +267,8 @@ export const notifications = pgTable(
   },
   (t) => [
     index('notifications_user_idx').on(t.userId, t.readAt),
+    // Đếm thông báo chưa đọc chạy rất thường xuyên → chỉ mục bộ phận chỉ gồm bản ghi chưa đọc
+    index('notifications_unread_idx').on(t.userId, t.createdAt).where(sql`${t.readAt} is null`),
     index('notifications_created_idx').on(t.createdAt),
   ],
 );

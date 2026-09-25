@@ -227,6 +227,7 @@ export const reportEntryAudits = pgTable(
     index('report_entry_audits_date_idx').on(t.entryDate),
     index('report_entry_audits_created_idx').on(t.createdAt),
     index('report_entry_audits_tmpl_idx').on(t.templateId),
+    index('report_entry_audits_tmpl_date_idx').on(t.templateId, t.entryDate),
   ],
 );
 
@@ -258,6 +259,7 @@ export const reportSnapshots = pgTable(
     index('report_snapshots_dept_idx').on(t.departmentId),
     index('report_snapshots_period_idx').on(t.dateFrom, t.dateTo),
     index('report_snapshots_created_idx').on(t.createdAt),
+    index('report_snapshots_tmpl_status_idx').on(t.templateId, t.status),
   ],
 );
 

@@ -75,28 +75,24 @@ export function AdvancedFilter({ resource, value, onChange, className, defaultOp
 
   const departments = useQuery({
     queryKey: ['filter-options-departments'],
-    enabled: open,
     staleTime: 5 * 60 * 1000,
     queryFn: () => apiFetch<{ id: number; name: string; level: number }[]>('/departments/options'),
   });
 
   const users = useQuery({
     queryKey: ['filter-options-users'],
-    enabled: open,
     staleTime: 5 * 60 * 1000,
     queryFn: () => apiFetch<{ items: { id: number; fullName: string; username: string }[] }>('/users?pageSize=200'),
   });
 
   const workflows = useQuery({
     queryKey: ['filter-options-workflows'],
-    enabled: open,
     staleTime: 5 * 60 * 1000,
     queryFn: () => apiFetch<{ items: { id: number; name: string }[] }>('/hsba/workflows'),
   });
 
   const roles = useQuery({
     queryKey: ['filter-options-roles'],
-    enabled: open,
     staleTime: 5 * 60 * 1000,
     queryFn: () => apiFetch<{ items: { id: number; name: string }[] }>('/roles?pageSize=100'),
   });

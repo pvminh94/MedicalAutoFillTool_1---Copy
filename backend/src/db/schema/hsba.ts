@@ -153,6 +153,11 @@ export const hsbaRequests = pgTable(
     index('hsba_requests_pending_idx').on(t.pendingStepKey, t.status),
     index('hsba_requests_status_created_idx').on(t.status, t.createdAt),
     index('hsba_requests_dept_created_idx').on(t.departmentId, t.createdAt),
+    index('hsba_requests_return_count_idx').on(t.returnCount),
+    // Số tiền lưu dạng chuỗi → sắp xếp/lọc theo số cần chỉ mục biểu thức
+    index('hsba_requests_amount_num_idx').on(
+      sql`(coalesce(nullif(regexp_replace(${t.amount}, '[^0-9.-]', '', 'g'), ''), '0'))::numeric`,
+    ),
     index('hsba_requests_search_idx').using(
       'gin',
       sql`to_tsvector('simple', ${t.patientName} || ' ' || ${t.maKcb} || ' ' || ${t.code} || ' ' || ${t.maTheBhyt} || ' ' || ${t.requesterName})`,
