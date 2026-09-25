@@ -1,0 +1,52 @@
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm/
+
+# ---- Build ----
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
+.swc/
+
+# ---- Môi trường & bí mật ----
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
+!deploy/**/*.key.example
+
+# ---- Dữ liệu chạy thử cục bộ ----
+.data/
+data/
+pgdata/
+uploads/
+storage/
+logs/
+*.log
+backups/
+exports/
+tmp/
+
+# ---- CSDL nhúng (dev) ----
+**/pgdata/
+**/.pglite/
+
+# ---- Sinh tự động ----
+/backend/src/generated/
+coverage/
+
+# ---- Hệ điều hành / IDE ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json.example
+*.swp

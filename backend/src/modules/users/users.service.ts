@@ -1,0 +1,568 @@
+/**
+ * Quản lý người dùng — tạo/sửa/xoá, gán vai trò, gán phạm vi khoa, đặt lại mật khẩu.
+ * Mọi thao tác đều xoá cache quyền để có hiệu lực tức thì.
+ */
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, asc, desc, eq, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { config } from '../../config/env';
+import { DbService } from '../../db/db.service';
+import {
+  departments,
+  loginLogs,
+  roles,
+  userDepartmentScopes,
+  userRoles,
+  users,
+} from '../../db/schema';
+import { buildPage, type Paginated } from '../../common/dto/query.dto';
+import { SUPER_ADMIN_ROLE, type AccessContext } from '../../common/types/access-context';
+import { AuthService } from '../auth/auth.service';
+import { AuditService } from '../audit/audit.service';
+import type {
+  CreateUserDto,
+  ImportUsersDto,
+  ResetPasswordDto,
+  SetDepartmentScopesDto,
+  SetRolesDto,
+  UpdateUserDto,
+  UserQueryDto,
+} from './dto/user.dto';
+
+const DEFAULT_RESET_PASSWORD = 'Qlbs@123456';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    private readonly db: DbService,
+    private readonly auth: AuthService,
+    private readonly audit: AuditService,
+  ) {}
+
+  async list(query: UserQueryDto): Promise<Paginated<Record<string, unknown>>> {
+    const where: SQL[] = [];
+    if (!query.includeDeleted) where.push(isNull(users.deletedAt));
+    if (query.activeOnly) where.push(eq(users.active, true));
+    if (query.active !== undefined) where.push(eq(users.active, query.active));
+    if (query.departmentId !== undefined) where.push(eq(users.departmentId, query.departmentId));
+    if (query.departmentIds?.length) {
+      where.push(inArray(users.departmentId, query.departmentIds.map(Number)));
+    }
+    if (query.q?.trim()) {
+      const like = `%${query.q.trim()}%`;
+      where.push(
+        or(
+          ilike(users.fullName, like),
+          ilike(users.username, like),
+          ilike(users.title, like),
+          ilike(users.email, like),
+          ilike(users.phone, like),
+        ) as SQL,
+      );
+    }
+    for (const f of query.parseFilters()) {
+      switch (f.field) {
+        case 'active':
+          where.push(eq(users.active, f.value === 'true'));
+          break;
+        case 'title':
+          where.push(ilike(users.title, `%${f.value}%`));
+          break;
+        case 'username':
+          where.push(ilike(users.username, `%${f.value}%`));
+          break;
+        case 'fullName':
+          where.push(ilike(users.fullName, `%${f.value}%`));
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (query.roleCode) {
+      const sub = this.db.db
+        .select({ userId: userRoles.userId })
+        .from(userRoles)
+        .innerJoin(roles, eq(roles.id, userRoles.roleId))
+        .where(eq(roles.code, query.roleCode));
+      where.push(inArray(users.id, sub));
+    }
+
+    const condition = where.length ? and(...where) : undefined;
+
+    const [countRow] = await this.db.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(users)
+      .where(condition);
+
+    const rows = await this.db.db
+      .select({
+        id: users.id,
+        username: users.username,
+        fullName: users.fullName,
+        title: users.title,
+        email: users.email,
+        phone: users.phone,
+        departmentId: users.departmentId,
+        departmentName: departments.name,
+        active: users.active,
+        mustChangePassword: users.mustChangePassword,
+        twoFactorEnabled: users.twoFactorEnabled,
+        lastLoginAt: users.lastLoginAt,
+        lockedUntil: users.lockedUntil,
+        failedLoginCount: users.failedLoginCount,
+        note: users.note,
+        createdAt: users.createdAt,
+        roles: sql<string>`coalesce((
+          select string_agg(r.name || '|' || r.code || '|' || r.color, ';;' order by r.priority)
+          from user_roles ur join roles r on r.id = ur.role_id
+          where ur.user_id = ${users.id}
+        ), '')`,
+      })
+      .from(users)
+      .leftJoin(departments, eq(departments.id, users.departmentId))
+      .where(condition)
+      .orderBy(desc(users.active), asc(users.fullName))
+      .limit(query.limit)
+      .offset(query.offset);
+
+    const items = rows.map((r) => {
+      const roleList = r.roles
+        ? r.roles.split(';;').map((chunk) => {
+            const [name = '', code = '', color = '#0ea5e9'] = chunk.split('|');
+            return { name, code, color };
+          })
+        : [];
+      const { roles: _raw, ...rest } = r;
+      return { ...rest, roles: roleList };
+    });
+
+    return buildPage(items, countRow?.total ?? 0, query.page, query.pageSize);
+  }
+
+  async findOne(id: number) {
+    const [user] = await this.db.db
+      .select({
+        id: users.id,
+        username: users.username,
+        fullName: users.fullName,
+        title: users.title,
+        email: users.email,
+        phone: users.phone,
+        avatar: users.avatar,
+        signatureImage: users.signatureImage,
+        departmentId: users.departmentId,
+        departmentName: departments.name,
+        active: users.active,
+        mustChangePassword: users.mustChangePassword,
+        twoFactorEnabled: users.twoFactorEnabled,
+        lastLoginAt: users.lastLoginAt,
+        lockedUntil: users.lockedUntil,
+        note: users.note,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .leftJoin(departments, eq(departments.id, users.departmentId))
+      .where(eq(users.id, id))
+      .limit(1);
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+
+    const userRoleList = await this.db.db
+      .select({ id: roles.id, code: roles.code, name: roles.name, color: roles.color, dataScope: roles.dataScope })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, id));
+
+    const scopes = await this.db.db
+      .select({ id: departments.id, code: departments.code, name: departments.name })
+      .from(userDepartmentScopes)
+      .innerJoin(departments, eq(departments.id, userDepartmentScopes.departmentId))
+      .where(eq(userDepartmentScopes.userId, id));
+
+    const recentLogins = await this.db.db
+      .select({
+        success: loginLogs.success,
+        ip: loginLogs.ip,
+        userAgent: loginLogs.userAgent,
+        reason: loginLogs.reason,
+        createdAt: loginLogs.createdAt,
+      })
+      .from(loginLogs)
+      .where(eq(loginLogs.userId, id))
+      .orderBy(desc(loginLogs.createdAt))
+      .limit(10);
+
+    return { ...user, roles: userRoleList, departmentScopes: scopes, recentLogins };
+  }
+
+  private async resolveRoleIds(codes: string[]): Promise<number[]> {
+    if (codes.length === 0) return [];
+    const rows = await this.db.db
+      .select({ id: roles.id, code: roles.code })
+      .from(roles)
+      .where(inArray(roles.code, codes));
+    const found = new Set(rows.map((r) => r.code));
+    const missing = codes.filter((c) => !found.has(c));
+    if (missing.length > 0) throw new BadRequestException(`Vai trò không tồn tại: ${missing.join(', ')}`);
+    return rows.map((r) => r.id);
+  }
+
+  async create(dto: CreateUserDto) {
+    const username = dto.username.trim().toLowerCase();
+    const dup = await this.db.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, username))
+      .limit(1);
+    if (dup.length > 0) throw new ConflictException(`Tên đăng nhập "${username}" đã tồn tại`);
+
+    const password = dto.password ?? DEFAULT_RESET_PASSWORD;
+    const [created] = await this.db.db
+      .insert(users)
+      .values({
+        username,
+        passwordHash: await this.auth.hashPassword(password),
+        fullName: dto.fullName.trim(),
+        title: dto.title ?? '',
+        email: dto.email ?? '',
+        phone: dto.phone ?? '',
+        departmentId: dto.departmentId ?? null,
+        mustChangePassword: dto.mustChangePassword ?? true,
+        note: dto.note ?? '',
+        active: dto.active ?? true,
+      })
+      .returning();
+
+    if (dto.roleCodes?.length) {
+      const ids = await this.resolveRoleIds(dto.roleCodes);
+      if (ids.length > 0) {
+        await this.db.db
+          .insert(userRoles)
+          .values(ids.map((roleId) => ({ userId: created.id, roleId })))
+          .onConflictDoNothing();
+      }
+    }
+    if (dto.departmentScopeIds?.length) {
+      await this.db.db
+        .insert(userDepartmentScopes)
+        .values(dto.departmentScopeIds.map((departmentId) => ({ userId: created.id, departmentId })))
+        .onConflictDoNothing();
+    }
+
+    await this.auth.invalidateUserCache(created.id);
+    return { ...(await this.findOne(created.id)), initialPassword: dto.password ? undefined : password };
+  }
+
+  async update(id: number, dto: UpdateUserDto) {
+    const current = await this.findOne(id);
+
+    if (dto.username && dto.username.toLowerCase() !== current.username) {
+      const dup = await this.db.db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.username, dto.username.toLowerCase()), ne(users.id, id)))
+        .limit(1);
+      if (dup.length > 0) throw new ConflictException(`Tên đăng nhập "${dto.username}" đã tồn tại`);
+    }
+
+    await this.db.db
+      .update(users)
+      .set({
+        ...(dto.username !== undefined ? { username: dto.username.trim().toLowerCase() } : {}),
+        ...(dto.fullName !== undefined ? { fullName: dto.fullName.trim() } : {}),
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+        ...(dto.departmentId !== undefined ? { departmentId: dto.departmentId ?? null } : {}),
+        ...(dto.note !== undefined ? { note: dto.note } : {}),
+        ...(dto.active !== undefined ? { active: dto.active } : {}),
+        ...(dto.mustChangePassword !== undefined ? { mustChangePassword: dto.mustChangePassword } : {}),
+        ...(dto.password ? { passwordHash: await this.auth.hashPassword(dto.password) } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id));
+
+    if (dto.roleCodes) await this.setRoles(id, { roleCodes: dto.roleCodes, replace: true });
+    if (dto.departmentScopeIds) await this.setDepartmentScopes(id, { departmentIds: dto.departmentScopeIds });
+
+    await this.auth.invalidateUserCache(id);
+    if (dto.password) await this.auth.revokeAllSessions(id);
+    return this.findOne(id);
+  }
+
+  /** Xoá mềm — giữ lại lịch sử thao tác của người dùng */
+  async remove(id: number, actor?: AccessContext) {
+    const user = await this.findOne(id);
+    if (user.username === config.seed.adminUser) {
+      throw new ForbiddenException('Không thể xoá tài khoản quản trị gốc');
+    }
+    if (actor && actor.id === id) {
+      throw new BadRequestException('Không thể tự xoá tài khoản đang đăng nhập');
+    }
+    await this.db.db
+      .update(users)
+      .set({ active: false, deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, id));
+    await this.auth.revokeAllSessions(id);
+    await this.auth.invalidateUserCache(id);
+    return { message: `Đã xoá người dùng ${user.fullName}` };
+  }
+
+  async restore(id: number) {
+    await this.db.db
+      .update(users)
+      .set({ active: true, deletedAt: null, updatedAt: new Date() })
+      .where(eq(users.id, id));
+    await this.auth.invalidateUserCache(id);
+    return this.findOne(id);
+  }
+
+  async toggleActive(id: number, active: boolean) {
+    await this.db.db
+      .update(users)
+      .set({ active, updatedAt: new Date() })
+      .where(eq(users.id, id));
+    if (!active) await this.auth.revokeAllSessions(id);
+    await this.auth.invalidateUserCache(id);
+    return { message: active ? 'Đã kích hoạt tài khoản' : 'Đã vô hiệu hoá tài khoản' };
+  }
+
+  /** Đặt lại mật khẩu (quản trị thực hiện) */
+  async resetPassword(id: number, dto: ResetPasswordDto) {
+    const newPassword = dto.newPassword ?? DEFAULT_RESET_PASSWORD;
+    await this.db.db
+      .update(users)
+      .set({
+        passwordHash: await this.auth.hashPassword(newPassword),
+        mustChangePassword: dto.forceChange ?? true,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id));
+    await this.auth.revokeAllSessions(id);
+    return {
+      message: 'Đã đặt lại mật khẩu',
+      temporaryPassword: dto.newPassword ? undefined : newPassword,
+    };
+  }
+
+  async unlock(id: number) {
+    await this.db.db
+      .update(users)
+      .set({ lockedUntil: null, failedLoginCount: 0, updatedAt: new Date() })
+      .where(eq(users.id, id));
+    return { message: 'Đã mở khoá tài khoản' };
+  }
+
+  async setRoles(id: number, dto: SetRolesDto) {
+    await this.findOne(id);
+    const ids = await this.resolveRoleIds(dto.roleCodes);
+
+    // Bảo vệ: không cho gỡ vai trò quản trị tối cao khỏi người dùng cuối cùng
+    const [superRole] = await this.db.db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.code, SUPER_ADMIN_ROLE))
+      .limit(1);
+    if (superRole) {
+      const hadSuper = await this.db.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(userRoles)
+        .where(and(eq(userRoles.userId, id), eq(userRoles.roleId, superRole.id)));
+      const willHaveSuper = ids.includes(superRole.id);
+      if ((hadSuper[0]?.total ?? 0) > 0 && !willHaveSuper) {
+        const [remaining] = await this.db.db
+          .select({ total: sql<number>`count(*)::int` })
+          .from(userRoles)
+          .where(eq(userRoles.roleId, superRole.id));
+        if ((remaining?.total ?? 0) <= 1) {
+          throw new BadRequestException(
+            'Đây là tài khoản quản trị tối cao duy nhất — không thể gỡ vai trò này',
+          );
+        }
+      }
+    }
+
+    await this.db.transaction(async (tx) => {
+      if (dto.replace !== false) {
+        await tx.delete(userRoles).where(eq(userRoles.userId, id));
+      }
+      if (ids.length > 0) {
+        await tx
+          .insert(userRoles)
+          .values(ids.map((roleId) => ({ userId: id, roleId })))
+          .onConflictDoNothing();
+      }
+    });
+    await this.auth.invalidateUserCache(id);
+    return this.findOne(id);
+  }
+
+  async setDepartmentScopes(id: number, dto: SetDepartmentScopesDto) {
+    await this.findOne(id);
+    await this.db.transaction(async (tx) => {
+      await tx.delete(userDepartmentScopes).where(eq(userDepartmentScopes.userId, id));
+      if (dto.departmentIds.length > 0) {
+        await tx
+          .insert(userDepartmentScopes)
+          .values(dto.departmentIds.map((departmentId) => ({ userId: id, departmentId })))
+          .onConflictDoNothing();
+      }
+    });
+    await this.auth.invalidateUserCache(id);
+    return this.findOne(id);
+  }
+
+  /** Thống kê phục vụ trang quản trị */
+  async stats() {
+    const [total] = await this.db.db.select({ total: sql<number>`count(*)::int` }).from(users).where(isNull(users.deletedAt));
+    const [active] = await this.db.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(users)
+      .where(and(isNull(users.deletedAt), eq(users.active, true)));
+    const [locked] = await this.db.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(users)
+      .where(and(isNull(users.deletedAt), sql`${users.lockedUntil} > now()`));
+    const [neverLoggedIn] = await this.db.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(users)
+      .where(and(isNull(users.deletedAt), isNull(users.lastLoginAt)));
+    const byDepartment = await this.db.db
+      .select({ departmentId: users.departmentId, departmentName: departments.name, total: sql<number>`count(*)::int` })
+      .from(users)
+      .leftJoin(departments, eq(departments.id, users.departmentId))
+      .where(isNull(users.deletedAt))
+      .groupBy(users.departmentId, departments.name)
+      .orderBy(desc(sql`count(*)`))
+      .limit(20);
+    return {
+      total: total?.total ?? 0,
+      active: active?.total ?? 0,
+      locked: locked?.total ?? 0,
+      neverLoggedIn: neverLoggedIn?.total ?? 0,
+      byDepartment,
+    };
+  }
+
+  /** Nhập danh sách người dùng từ Excel/JSON */
+  async importUsers(dto: ImportUsersDto, actor?: AccessContext) {
+    const results = { created: 0, updated: 0, skipped: 0, errors: [] as { row: number; message: string }[] };
+    const roleCache = new Map<string, number>();
+
+    for (let i = 0; i < dto.rows.length; i++) {
+      const row = dto.rows[i];
+      const username = String(row['username'] ?? row['Tên đăng nhập'] ?? '').trim().toLowerCase();
+      const fullName = String(row['fullName'] ?? row['Họ tên'] ?? row['Họ và tên'] ?? '').trim();
+      if (!username || !fullName) {
+        results.errors.push({ row: i + 2, message: 'Thiếu tên đăng nhập hoặc họ tên' });
+        results.skipped++;
+        continue;
+      }
+      try {
+        const [existing] = await this.db.db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.username, username))
+          .limit(1);
+
+        const title = String(row['title'] ?? row['Chức danh'] ?? '').trim();
+        const phone = String(row['phone'] ?? row['Điện thoại'] ?? '').trim();
+        const email = String(row['email'] ?? row['Email'] ?? '').trim();
+        const deptCode = String(row['departmentCode'] ?? row['Mã khoa'] ?? row['Khoa'] ?? '').trim();
+        let departmentId: number | null = null;
+        if (deptCode) {
+          const [dept] = await this.db.db
+            .select({ id: departments.id })
+            .from(departments)
+            .where(or(eq(departments.code, deptCode), eq(departments.name, deptCode)))
+            .limit(1);
+          departmentId = dept?.id ?? null;
+          if (!dept) results.errors.push({ row: i + 2, message: `Không tìm thấy khoa "${deptCode}"` });
+        }
+
+        if (dto.dryRun) {
+          results.created++;
+          continue;
+        }
+
+        let userId: number;
+        if (existing) {
+          if (!dto.overwrite) {
+            results.skipped++;
+            continue;
+          }
+          await this.db.db
+            .update(users)
+            .set({ fullName, title, phone, email, departmentId, updatedAt: new Date() })
+            .where(eq(users.id, existing.id));
+          userId = existing.id;
+          results.updated++;
+        } else {
+          const password = String(row['password'] ?? '').trim() || DEFAULT_RESET_PASSWORD;
+          const [created] = await this.db.db
+            .insert(users)
+            .values({
+              username,
+              passwordHash: await this.auth.hashPassword(password),
+              fullName,
+              title,
+              phone,
+              email,
+              departmentId,
+              mustChangePassword: true,
+            })
+            .returning();
+          userId = created.id;
+          results.created++;
+        }
+
+        const roleCodesRaw = String(row['roles'] ?? row['Vai trò'] ?? '').trim();
+        if (roleCodesRaw) {
+          const codes = roleCodesRaw.split(/[,;|]/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+          const ids: number[] = [];
+          for (const code of codes) {
+            if (roleCache.has(code)) {
+              ids.push(roleCache.get(code)!);
+              continue;
+            }
+            const [r] = await this.db.db.select({ id: roles.id }).from(roles).where(eq(roles.code, code)).limit(1);
+            if (r) {
+              roleCache.set(code, r.id);
+              ids.push(r.id);
+            } else {
+              results.errors.push({ row: i + 2, message: `Vai trò "${code}" không tồn tại` });
+            }
+          }
+          if (ids.length > 0) {
+            await this.db.db
+              .insert(userRoles)
+              .values(ids.map((roleId) => ({ userId, roleId })))
+              .onConflictDoNothing();
+          }
+        }
+        await this.auth.invalidateUserCache(userId);
+      } catch (err) {
+        results.errors.push({ row: i + 2, message: (err as Error).message });
+      }
+    }
+
+    await this.audit.log({
+      userId: actor?.id ?? null,
+      username: actor?.username ?? '',
+      action: 'IMPORT',
+      module: 'ADMIN',
+      entity: 'user',
+      description: `Nhập ${dto.rows.length} người dùng: ${results.created} mới, ${results.updated} cập nhật, ${results.skipped} bỏ qua, ${results.errors.length} lỗi`,
+    });
+
+    return results;
+  }
+}
