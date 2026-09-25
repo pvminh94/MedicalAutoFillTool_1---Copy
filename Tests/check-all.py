@@ -249,6 +249,24 @@ def check_engine_api():
     return True
 
 
+# ------------------------------------------------------------------ 8. self-test
+def check_selftest():
+    """Chạy Tests/selftest-checkers.py — kiểm chứng chính các checker ở trên.
+
+    Không có bước này thì một checker hỏng vẫn in ✅ và tạo cảm giác an toàn giả.
+    """
+    global CHECKS
+    CHECKS += 1
+    r = run([sys.executable, os.path.join(ROOT, 'Tests', 'selftest-checkers.py')])
+    if r.returncode != 0:
+        bad = [ln for ln in (r.stdout + r.stderr).splitlines() if ln.startswith('❌') or ln.strip().startswith('•')]
+        fail('self-test', '\n      ' + '\n      '.join(bad[:10]))
+        return False
+    n = len([ln for ln in r.stdout.splitlines() if ln.startswith('✅')])
+    print(f'  ✅ Self-test: {n} case kiểm chứng chính các checker đều đạt')
+    return True
+
+
 def main():
     print('=' * 74)
     print('KIỂM TRA TỔNG HỢP (không cần .NET SDK)')
@@ -261,6 +279,7 @@ def main():
         check_profiles(),
         check_views(),
         check_engine_api(),
+        check_selftest(),
     ]
     print('-' * 74)
     if FAILS:

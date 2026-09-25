@@ -412,7 +412,8 @@ public partial class Form1 : Form
 
             if (old != null)
             {
-                try { old.CoreWebView2?.Dispose(); } catch { }
+                // CoreWebView2 KHÔNG có Dispose() (CS1061) — Dispose control WebView2
+                // là đủ: nó tự huỷ CoreWebView2Controller và giải phóng tiến trình render.
                 try { old.Dispose(); } catch { }
                 try { Controls.Remove(old); } catch { }
             }
@@ -1288,8 +1289,7 @@ public partial class Form1 : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         try { ConfigRepository.StopWatching(); } catch { }
-        try { _webView?.CoreWebView2?.Dispose(); } catch { }
-        try { _webView?.Dispose(); } catch { }
+        try { _webView?.Dispose(); } catch { }   // tự huỷ cả CoreWebView2
         AppLogger.Info("==== Đóng phần mềm ====");
         base.OnFormClosed(e);
     }

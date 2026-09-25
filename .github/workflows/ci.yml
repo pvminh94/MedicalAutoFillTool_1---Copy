@@ -5,9 +5,13 @@ name: CI
 # (nhờ <EnableWindowsTargeting>true</EnableWindowsTargeting>) và chạy bộ test engine,
 # nên lỗi cú pháp/sai API C# bị bắt ngay khi push thay vì lúc chạy ở bệnh viện.
 #
-# Các bước build đặt continue-on-error để MỘT lần push lộ ra hết lỗi của cả 3 project
-# (nếu dừng ở project đầu thì phải push 3 vòng mới thấy hết lỗi), rồi bước cuối
-# mới tổng hợp và làm fail job.
+# Hai chi tiết cố ý:
+#  - continue-on-error ở các bước build: MỘT lần push lộ ra hết lỗi của cả 3 project
+#    (nếu dừng ở project đầu thì phải push 3 vòng mới thấy hết lỗi). Bước cuối mới
+#    tổng hợp outcome và làm fail job.
+#  - bước "In toàn bộ lỗi biên dịch": annotation của GitHub bị giới hạn số lượng và
+#    hay lặp, nên phải tự trích `error CSxxxx` từ log và phát lại thành ::error::
+#    kèm file/dòng để đọc được qua API.
 
 on:
   push:
@@ -29,7 +33,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Kiểm tra cấu trúc repo (C# / csproj / JS / JSON / view / engine API)
+      - name: Kiểm tra cấu trúc repo (C# / csproj / JS / JSON / view / engine API / self-test)
         run: python3 Tests/check-all.py
 
       - name: Cài jsdom cho test engine
@@ -50,24 +54,35 @@ jobs:
       - name: Build bản Web (net9.0)
         id: buildWeb
         continue-on-error: true
-        run: dotnet build MedicalAutoFillWeb/MedicalAutoFillWeb.csproj -c Release --nologo -v minimal
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet build MedicalAutoFillWeb/MedicalAutoFillWeb.csproj -c Release --nologo -v minimal 2>&1 | tee /tmp/build-web.log
 
       - name: Build MedinetBridge (net9.0-windows)
         id: buildBridge
         continue-on-error: true
-        run: dotnet build MedinetBridge/MedinetBridge.csproj -c Release --nologo -v minimal
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet build MedinetBridge/MedinetBridge.csproj -c Release --nologo -v minimal 2>&1 | tee /tmp/build-bridge.log
 
       - name: Build bản WinForms (net8.0-windows)
         id: buildWinForms
         continue-on-error: true
-        run: dotnet build MedicalAutoFillTool.csproj -c Release --nologo -v minimal
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet build MedicalAutoFillTool.csproj -c Release --nologo -v minimal 2>&1 | tee /tmp/build-winforms.log
 
       - name: Publish thử bản WinForms ra 1 file .exe
         id: publishWinForms
         continue-on-error: true
-        run: >
-          dotnet publish MedicalAutoFillTool.csproj -c Release -r win-x64 --self-contained
-          -p:PublishSingleFile=true -o /tmp/maf-publish --nologo -v minimal
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet publish MedicalAutoFillTool.csproj -c Release -r win-x64 --self-contained \
+            -p:PublishSingleFile=true -o /tmp/maf-publish --nologo -v minimal 2>&1 | tee /tmp/build-publish.log
 
       - name: Kiểm tra .exe có nhúng engine không
         id: checkExe
@@ -80,6 +95,29 @@ jobs:
             echo "LỖI: không thấy maf-engine.js trong .exe — kiểm tra EmbeddedResource trong csproj"
             exit 1
           fi
+
+      - name: In toàn bộ lỗi biên dịch (vượt giới hạn annotation của GitHub)
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          total=0
+          for f in /tmp/build-*.log; do
+            while IFS= read -r line; do
+              line="${line%$'\r'}"
+              [ -z "$line" ] && continue
+              total=$((total + 1))
+              file="$(printf '%s' "$line" | sed -E 's/^(.*)\(([0-9]+),([0-9]+)\): (error|warning) .*/\1/')"
+              ln="$(printf '%s' "$line" | sed -E 's/^(.*)\(([0-9]+),([0-9]+)\): (error|warning) .*/\2/')"
+              msg="$(printf '%s' "$line" | sed -E 's/^[^)]*\): //')"
+              if [ "$file" != "$line" ] && [ -n "$file" ]; then
+                echo "::error file=${file},line=${ln}::[$(basename "$f" .log)] ${msg}"
+              else
+                echo "::error::[$(basename "$f" .log)] ${line}"
+              fi
+            done < <(grep -E "error (CS|MSB|RZ|NU|MSB)[0-9]+" "$f" 2>/dev/null | sort -u | head -60)
+          done
+          echo "Tổng số dòng lỗi biên dịch đã trích: $total"
 
       - name: Tổng hợp kết quả
         if: always()
@@ -105,7 +143,7 @@ jobs:
             [ "$o" = "success" ] || fail=1
           done
           if [ "$fail" = "1" ]; then
-            echo "::error::Ít nhất một project .NET không biên dịch được — xem annotation của từng bước build."
+            echo "::error::Ít nhất một project .NET không biên dịch được — xem các ::error:: ở bước 'In toàn bộ lỗi biên dịch'."
             exit 1
           fi
           echo "✅ Tất cả project .NET biên dịch thành công."

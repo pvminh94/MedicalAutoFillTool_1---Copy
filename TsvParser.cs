@@ -148,7 +148,7 @@ public static class TsvParser
     }
 
     /// <summary>
-    * Dò xem dòng nào là tiêu đề, bằng cách so với nhãn/tên cột đã cấu hình.
+    /// Dò xem dòng nào là tiêu đề, bằng cách so với nhãn/tên cột đã cấu hình.
     /// Trả về chỉ số dòng tiêu đề, hoặc -1 nếu khối dán không có tiêu đề.
     /// </summary>
     public static int DetectHeaderRow(ParsedTable table, IReadOnlyList<FieldMapping> fields)

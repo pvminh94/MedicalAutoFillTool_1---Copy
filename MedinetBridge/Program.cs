@@ -268,7 +268,7 @@ internal static class Program
                 {
                     var old = _webView;
                     _webView = null;
-                    try { old?.CoreWebView2?.Dispose(); } catch { }
+                    // CoreWebView2 không có Dispose(); Dispose control là đủ.
                     try { old?.Dispose(); } catch { }
                     _webView = new WebView2 { Dock = DockStyle.Fill };
                     _mainForm.Controls.Add(_webView);

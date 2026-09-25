@@ -29,6 +29,7 @@ def check(path):
 
     stack = []          # (ký tự mở, số dòng)
     errors = []
+    block_comment_lines = set()   # các dòng nằm trong /* ... */
     i, n, line = 0, len(src), 1
     interp_depth = []   # stack đánh dấu đang trong {} của chuỗi interpolated
 
@@ -50,11 +51,14 @@ def check(path):
 
         # ---- comment khối ----
         if c == '/' and peek() == '*':
+            block_start = line
             i += 2
             while i < n and not (src[i] == '*' and peek() == '/'):
                 if src[i] == '\n':
                     line += 1
                 i += 1
+            for ln in range(block_start, line + 1):
+                block_comment_lines.add(ln)
             if i >= n:
                 errors.append(f"dòng {line}: comment /* chưa đóng")
                 break
@@ -176,7 +180,36 @@ def check(path):
     for ch, ln in stack:
         errors.append(f"dòng {ln}: '{ch}' chưa được đóng")
 
+    # Pass 2: doc-comment sai cú pháp (không ảnh hưởng cân bằng ngoặc nên pass 1 không thấy).
+    errors.extend(check_doc_comments(src, block_comment_lines))
+
     return errors
+
+
+def check_doc_comments(src, in_block_comment=frozenset()):
+    """Bắt dòng mở đầu bằng '*' đơn lẻ nằm giữa khối doc-comment '///'.
+
+    Ví dụ lỗi thật (TsvParser.cs:151) — thiếu một dấu '/' ở đầu dòng:
+        /// <summary>
+        * Dò xem dòng nào là tiêu đề...      <-- dòng này là CODE, không phải comment
+        /// </summary>
+    Compiler báo 'Invalid token \'*\' in a member declaration' + hàng loạt '; expected'.
+    """
+    errs = []
+    lines = src.splitlines()
+    for i, line in enumerate(lines):
+        if (i + 1) in in_block_comment:
+            continue        # dòng '*' bên trong /* ... */ là hợp lệ
+        stripped = line.strip()
+        if not stripped.startswith('*') or stripped.startswith('*/') or stripped.startswith('**'):
+            continue
+        prev = lines[i - 1].strip() if i > 0 else ''
+        nxt = lines[i + 1].strip() if i + 1 < len(lines) else ''
+        # Chỉ kết luận là lỗi khi hàng xóm là doc-comment (/// ...) hoặc '*' cùng kiểu.
+        if prev.startswith('///') or prev.startswith('*') or nxt.startswith('///') or nxt.startswith('*'):
+            errs.append(f"dòng {i + 1}: doc-comment viết thiếu dấu '/' — "
+                        f"'{stripped[:44]}' phải bắt đầu bằng '///'")
+    return errs
 
 
 def main():
