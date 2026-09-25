@@ -6,6 +6,8 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   eslint: { ignoreDuringBuilds: true },
+  // Cho phép truy cập khi chạy dev sau proxy/tên miền tạm (môi trường phát triển)
+  allowedDevOrigins: ['*.e2b.app', '*.e2b.dev', '*.arena.ai', 'localhost', '127.0.0.1'],
   async rewrites() {
     return [
       { source: '/api/:path*', destination: `${API_PROXY_TARGET}/api/:path*` },
