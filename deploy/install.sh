@@ -227,7 +227,6 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd || true)
 ROOT=''
 if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/../docker-compose.yml" ]]; then
   ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-  ok "Dùng mã nguồn tại: $ROOT"
 else
   if [[ ! -f "$INSTALL_DIR/docker-compose.yml" ]]; then
     command -v git >/dev/null 2>&1 || install_pkgs git
@@ -241,6 +240,27 @@ else
   ROOT="$INSTALL_DIR"
 fi
 cd "$ROOT"
+
+# Tự cập nhật mã nguồn về bản mới nhất (idempotent — KHÔNG bao giờ build code cũ
+# một cách âm thầm). Chỉ git pull khi là kho git sạch để không đè thay đổi local.
+if [[ -d .git ]] && command -v git >/dev/null 2>&1; then
+  if [[ -n "$(git status --porcelain -uno 2>/dev/null)" ]]; then
+    warn "Mã nguồn có thay đổi local — bỏ qua tự cập nhật (git pull)"
+  elif git fetch --quiet origin 2>/dev/null; then
+    if [[ -n "$BRANCH" && "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" != "$BRANCH" ]]; then
+      git checkout --quiet "$BRANCH" 2>/dev/null || warn "Không chuyển được sang nhánh '$BRANCH'"
+    fi
+    if git pull --ff-only --quiet 2>/dev/null; then
+      ok "Mã nguồn đã là bản mới nhất của nhánh '$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')'"
+    else
+      warn "Không tự git pull được (thiếu upstream hoặc lệch lịch sử) — dùng mã nguồn hiện có"
+    fi
+  else
+    warn "Không fetch được origin (mạng?) — dùng mã nguồn hiện có, KHÔNG đảm bảo là bản mới"
+  fi
+fi
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo 'không-git')
+ok "Dùng mã nguồn tại: $ROOT (commit $COMMIT)"
 ENV_FILE="$ROOT/.env"
 [[ -f docker-compose.yml ]] || die "Không tìm thấy docker-compose.yml trong $ROOT"
 command -v curl >/dev/null 2>&1 || install_pkgs curl ca-certificates
@@ -368,7 +388,8 @@ wait_http() { # wait_http URL MÔ_TẢ GIÂI_HẠN
   local url=$1 desc=$2 limit=${3:-180} start code
   start=$(date +%s)
   while true; do
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" 2>/dev/null || echo 000)
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" 2>/dev/null || true)
+    code=${code:-000}
     [[ "$code" == 2* ]] && return 0
     if (( $(date +%s) - start > limit )); then
       bad "$desc không trả về HTTP 2xx sau ${limit}s (lần thử cuối: HTTP $code)"
@@ -380,12 +401,12 @@ wait_http() { # wait_http URL MÔ_TẢ GIÂI_HẠN
 
 step '5/6 — Chờ dịch vụ sẵn sàng'
 wait_http "http://127.0.0.1:${API_PORT}/health" 'API /health' 300 || {
-  warn 'Log 30 dòng cuối của api:'; "${COMPOSE[@]}" logs --tail=30 api || true
+  warn 'Log 40 dòng cuối của api:'; "${COMPOSE[@]}" logs --tail=40 api || true
   die 'API không khỏe — dừng kiểm tra tại đây.'
 }
 ok 'API sẵn sàng (đã chạy migration + dữ liệu nền)'
 wait_http "http://127.0.0.1:${WEB_PORT}/login" 'Web /login' 180 || {
-  warn 'Log 30 dòng cuối của web:'; "${COMPOSE[@]}" logs --tail=30 web || true
+  warn 'Log 40 dòng cuối của web:'; "${COMPOSE[@]}" logs --tail=40 web || true
   die 'Web không sẵn sàng — dừng kiểm tra tại đây.'
 }
 ok 'Web sẵn sàng'
@@ -441,13 +462,13 @@ else
 fi
 
 # 6.4 Giao diện + tài liệu API
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:${WEB_PORT}/login" || echo 000)
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:${WEB_PORT}/login" 2>/dev/null || true); code=${code:-000}
 [[ "$code" == 2* ]] && okc "Trang đăng nhập /login trả về HTTP $code" \
                    || badc "Trang /login trả về HTTP $code (không phải 2xx)"
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:${WEB_PORT}/health" || echo 000)
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:${WEB_PORT}/health" 2>/dev/null || true); code=${code:-000}
 [[ "$code" == 2* ]] && okc 'Proxy Web /health → API: ok' \
                    || badc 'Proxy Web /health → API không hoạt động (HTTP $code)'
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:${API_PORT}/api/docs" || echo 000)
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:${API_PORT}/api/docs" 2>/dev/null || true); code=${code:-000}
 [[ "$code" == 2* ]] && okc "Swagger /api/docs: HTTP $code" \
                    || warn "Swagger /api/docs trả về HTTP $code (có thể đã tắt — không tính lỗi)"
 
