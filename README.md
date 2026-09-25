@@ -26,7 +26,7 @@ và [`bao-cao-khoa`](https://github.com/pvminh94/bao-cao-khoa) (Báo cáo công 
 
 | Lớp | Công nghệ |
 |---|---|
-| Backend | **Node.js + TypeScript** · NestJS 12 · Drizzle ORM (type-safe SQL) |
+| Backend | **Node.js + TypeScript** · NestJS 11 · Drizzle ORM (type-safe SQL) |
 | CSDL | **PostgreSQL 18** · chỉ mục B-tree/GIN · truy vấn tổng hợp bằng SQL thuần |
 | Cache & Queue | **Redis** (ioredis) · BullMQ (hàng đợi + tác vụ định kỳ) |
 | Frontend | **Next.js 15** (App Router) · React 19 · **shadcn/ui** · **Tailwind CSS 4** · responsive, tương thích nhiều màn hình (mobile → 4K) |
@@ -75,23 +75,32 @@ docker compose up -d --build
 ### 4.2. Chạy trực tiếp (phát triển)
 
 ```bash
-# Backend
+# 1) Backend
 cd backend
 cp .env.example .env
 npm install
+npm run db:generate           # sinh migration từ schema (chỉ cần khi sửa schema)
 npm run db:migrate            # tạo bảng
 npm run db:seed               # dữ liệu nền: quyền, vai trò, khoa mẫu, tài khoản admin
-npm run dev                   # http://localhost:4000
+npm run dev                   # http://localhost:4000  · Swagger: /api/docs
 
-# Frontend (cửa sổ khác)
+# 2) Frontend (cửa sổ khác)
 cd frontend
-cp .env.example .env.local
+cp .env.local.example .env.local
 npm install
 npm run dev                   # http://localhost:3000
 ```
 
-> Không có PostgreSQL/Redis trong máy? Backend kèm **Postgres nhúng (PGlite)** và
-> **cache trong bộ nhớ** để chạy thử: xem `docs/TRIEN-KHAI.md` mục “Chạy thử không cần Docker”.
+> Chưa có PostgreSQL/Redis trên máy? Chạy chế độ nhúng để thử nhanh:
+>
+> ```bash
+> cd backend
+> npm run dev:postgres          # PostgreSQL nhúng (PGlite) lắng nghe ở cổng 55432
+> # .env: DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/postgres
+> #       CACHE_DRIVER=memory   QUEUE_DRIVER=inline
+> ```
+
+**Kiểm tra nhanh sau khi chạy:** mở http://localhost:3000 → đăng nhập `admin` / `Admin@123`.
 
 ### 4.3. Tài khoản mặc định
 
@@ -112,6 +121,8 @@ npm run dev                   # http://localhost:3000
 | [docs/API.md](docs/API.md) | Danh mục endpoint |
 | [docs/TRIEN-KHAI.md](docs/TRIEN-KHAI.md) | Triển khai Docker/VPS, sao lưu, nâng cấp |
 | [docs/HUONG-DAN-SU-DUNG.md](docs/HUONG-DAN-SU-DUNG.md) | Hướng dẫn theo vai trò người dùng |
+
+*(Các tài liệu trên đang được hoàn thiện song song với mã nguồn.)*
 
 ---
 
