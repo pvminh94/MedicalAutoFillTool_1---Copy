@@ -243,7 +243,7 @@ export class ReportSnapshotController {
 
   @Patch(':id/status')
   @RequirePermissions(['report.snapshot.approve', 'report.snapshot.lock'], 'any')
-  @Audit({ module: 'REPORT', action: 'UPDATE', entity: 'report_snapshot', description: 'Duyệt/khoá báo cáo đã chốt' })
+  // Nhật ký do service ghi để phân biệt rõ duyệt / khoá / mở khoá kèm trạng thái trước–sau
   @ApiOperation({ summary: 'Duyệt hoặc khoá bản chốt số liệu' })
   status(
     @Param('id', ParseIntPipe) id: number,
