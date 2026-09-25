@@ -958,6 +958,13 @@ export class HsbaService {
     if (['HOAN_TAT', 'DA_HUY'].includes(detail.status)) {
       throw new BadRequestException('Phiếu đã kết thúc — không thể trả lại');
     }
+    // Phiếu đang chờ chính người đề nghị (mới tạo hoặc vừa bị trả lại) thì không có gì để trả lại:
+    // chỉ cần sửa nội dung rồi ký lại để gửi đi.
+    if (detail.status === 'TRA_LAI' || detail.currentStep === 0) {
+      throw new BadRequestException(
+        'Phiếu đang ở bước người đề nghị — sửa nội dung và ký lại để gửi đi, không cần trả lại',
+      );
+    }
     const { steps } = await this.resolveWorkflow(detail);
     const current = steps[detail.currentStep];
     if (!current) throw new BadRequestException('Không xác định được bước đang chờ');
