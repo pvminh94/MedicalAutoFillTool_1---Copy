@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -12,7 +12,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { AdvancedQueryDto } from '../../../common/dto/query.dto';
+import { AdvancedQueryDto, toBoolean } from '../../../common/dto/query.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'bs.nguyenvan.a' })
@@ -71,6 +71,7 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({ description: 'Bắt buộc đổi mật khẩu lần đăng nhập tới' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   mustChangePassword?: boolean;
 
@@ -81,6 +82,7 @@ export class CreateUserDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   active?: boolean;
 }
@@ -101,6 +103,7 @@ export class UserQueryDto extends AdvancedQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   active?: boolean;
 }
@@ -114,6 +117,7 @@ export class ResetPasswordDto {
 
   @ApiPropertyOptional({ description: 'Bắt buộc người dùng đổi mật khẩu sau khi đăng nhập' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   forceChange?: boolean;
 }
@@ -126,6 +130,7 @@ export class SetRolesDto {
 
   @ApiPropertyOptional({ description: 'Thay thế toàn bộ (true) hay chỉ thêm (false)', default: true })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   replace?: boolean;
 }
@@ -144,11 +149,13 @@ export class ImportUsersDto {
 
   @ApiPropertyOptional({ description: 'Ghi đè nếu tên đăng nhập đã tồn tại' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   overwrite?: boolean;
 
   @ApiPropertyOptional({ description: 'Chạy thử, không ghi vào CSDL' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   dryRun?: boolean;
 }

@@ -22,10 +22,18 @@ import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { Label, Textarea } from '@/components/ui/input';
+import {
+  HsbaRequestForm,
+  type DeptOption,
+  type RequestFormValue,
+  type UserOption,
+  type WorkflowOption,
+} from '@/components/hsba/request-form';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/status-badge';
+import type { Paginated } from '@/types/api';
 
 interface Signature {
   id: number;
@@ -70,8 +78,11 @@ interface Detail {
   ngayVaoVien: string | null;
   ngayRaVien: string | null;
   doiTuong: string | null;
+  requesterId: number;
   requesterName: string;
   requesterTitle: string | null;
+  workflowId: number | null;
+  departmentId: number | null;
   departmentName: string | null;
   reason: string;
   content: string;
@@ -103,11 +114,41 @@ export default function HsbaDetailPage() {
   const [returnReason, setReturnReason] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [showPdf, setShowPdf] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState<RequestFormValue>({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['hsba-detail', id],
     enabled: Number.isFinite(id),
     queryFn: () => apiFetch<Detail>(`/hsba/requests/${id}`),
+  });
+
+  const { data: userOptions } = useQuery({
+    queryKey: ['users-options'],
+    enabled: editOpen,
+    queryFn: () => apiFetch<Paginated<UserOption>>('/users?pageSize=200&activeOnly=true'),
+  });
+
+  const { data: deptOptions } = useQuery({
+    queryKey: ['departments-options'],
+    enabled: editOpen,
+    queryFn: () => apiFetch<DeptOption[]>('/departments/options'),
+  });
+
+  const { data: workflowOptions } = useQuery({
+    queryKey: ['hsba-workflows'],
+    enabled: editOpen,
+    queryFn: () => apiFetch<WorkflowOption[]>('/hsba/workflows'),
+  });
+
+  const updateRequest = useMutation({
+    mutationFn: (payload: RequestFormValue) => apiFetch(`/hsba/requests/${id}`, { method: 'PUT', body: payload }),
+    onSuccess: async () => {
+      toast.success('Đã cập nhật nội dung phiếu');
+      setEditOpen(false);
+      await invalidate();
+    },
+    onError: (err) => toast.error((err as Error).message),
   });
 
   const invalidate = async (): Promise<void> => {
@@ -210,7 +251,33 @@ export default function HsbaDetailPage() {
             </>
           ) : null}
           {editable && can('hsba.request.update') ? (
-            <Button variant="outline" onClick={() => toast.info('Mở biểu mẫu sửa phiếu ở bước tiếp theo của giao diện')}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditForm({
+                  requesterId: data.requesterId,
+                  requesterName: data.requesterName,
+                  requesterTitle: data.requesterTitle ?? '',
+                  departmentId: data.departmentId,
+                  departmentName: data.departmentName ?? '',
+                  priority: data.priority,
+                  workflowId: data.workflowId,
+                  patientName: data.patientName,
+                  patientBirthYear: data.patientBirthYear ?? '',
+                  patientGender: data.patientGender ?? '',
+                  maKcb: data.maKcb ?? '',
+                  maTheBhyt: data.maTheBhyt ?? '',
+                  ngayVaoVien: data.ngayVaoVien ?? '',
+                  ngayRaVien: data.ngayRaVien ?? '',
+                  doiTuong: data.doiTuong ?? '',
+                  reason: data.reason,
+                  content: data.content,
+                  amount: data.amount ?? '',
+                  attachmentsNote: data.attachmentsNote ?? '',
+                });
+                setEditOpen(true);
+              }}
+            >
               <PenLine /> Sửa nội dung
             </Button>
           ) : null}
@@ -346,7 +413,6 @@ export default function HsbaDetailPage() {
                       </div>
                     ) : step.state === 'PENDING' ? (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {step.canSignCurrent && can('hsba.request.sign-requester') === true ? null : null}
                         {step.canSignCurrent ? (
                           <Button size="sm" onClick={() => setSignTarget(step)}>
                             <CheckCircle2 /> Ký bước này
@@ -466,6 +532,33 @@ export default function HsbaDetailPage() {
         onConfirm={() => cancel.mutate()}
         onClose={() => setConfirmCancel(false)}
       />
+
+      {/* Sửa nội dung phiếu (khi chưa hoàn tất / bị trả lại) */}
+      <Dialog
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        size="xl"
+        title={`Sửa nội dung phiếu: ${data.code}`}
+        description="Chỉnh sửa rồi bấm Lưu; nếu phiếu bị trả lại, ký ở bước đang chờ để gửi lại"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Huỷ
+            </Button>
+            <Button loading={updateRequest.isPending} onClick={() => updateRequest.mutate(editForm)}>
+              <PenLine /> Lưu thay đổi
+            </Button>
+          </>
+        }
+      >
+        <HsbaRequestForm
+          value={editForm}
+          onChange={setEditForm}
+          users={userOptions?.items}
+          departments={deptOptions}
+          workflows={workflowOptions}
+        />
+      </Dialog>
 
       {/* Xem trước bản in */}
       <Dialog open={showPdf} onClose={() => setShowPdf(false)} size="xl" title={`Bản in: ${data.code}`} description="Kết xuất từ mẫu in đang ban hành">

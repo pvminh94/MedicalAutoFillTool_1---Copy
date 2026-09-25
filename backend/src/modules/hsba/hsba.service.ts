@@ -69,6 +69,35 @@ export function normalizeVN(input: string): string {
     .trim();
 }
 
+/** Ghép các trường cần tra cứu thành một chuỗi không dấu, viết thường. */
+export function buildSearchText(row: {
+  code?: string | null;
+  patientName?: string | null;
+  patientCode?: string | null;
+  requesterName?: string | null;
+  departmentName?: string | null;
+  maKcb?: string | null;
+  maTheBhyt?: string | null;
+  content?: string | null;
+  reason?: string | null;
+}): string {
+  return normalizeVN(
+    [
+      row.code,
+      row.patientName,
+      row.patientCode,
+      row.requesterName,
+      row.departmentName,
+      row.maKcb,
+      row.maTheBhyt,
+      row.content,
+      row.reason,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+}
+
 @Injectable()
 export class HsbaService {
   private readonly logger = new Logger(HsbaService.name);
@@ -318,24 +347,89 @@ export class HsbaService {
 
   /* ================================================================ PHIẾU */
 
-  buildSearchCondition(query: RequestQueryDto, user: AccessContext): SQL[] {
-    const where: SQL[] = [];
+  /**
+   * Điều kiện cho một bước ký: người dùng hiện tại có được ký bước này không.
+   * Trả về null nghĩa là không bao giờ được ký.
+   */
+  private signCondition(step: WorkflowStep, user: AccessContext): SQL | null {
+    if (user.isSuperAdmin) return sql`true`;
+    switch (step.kind) {
+      case 'requester':
+        return or(eq(hsbaRequests.requesterId, user.id), eq(hsbaRequests.createdBy, user.id)) as SQL;
+      case 'creator':
+        return eq(hsbaRequests.createdBy, user.id);
+      case 'dept_head': {
+        const isHead =
+          user.roles.includes('TRUONG_KHOA') || user.permissions.includes('hsba.request.sign-khtb');
+        if (!isHead) return null;
+        const deptIds = user.departmentIds.length
+          ? user.departmentIds
+          : user.departmentId
+            ? [user.departmentId]
+            : [];
+        return deptIds.length ? (inArray(hsbaRequests.departmentId, deptIds) as SQL) : null;
+      }
+      case 'role':
+      default: {
+        const codes = step.roleCodes ?? [];
+        if (codes.some((c) => user.roles.includes(c))) return sql`true`;
+        if (user.permissions.includes(`hsba.request.sign-${step.key.toLowerCase()}`)) return sql`true`;
+        return null;
+      }
+    }
+  }
+
+  /**
+   * Điều kiện SQL cho các phiếu đang chờ chính người dùng xử lý.
+   * Duyệt mọi quy trình đang bật vì mỗi khoa có thể dùng quy trình riêng.
+   */
+  async myTurnCondition(user: AccessContext): Promise<SQL | null> {
+    const cached = await this.cache.get<Record<string, string[]>>('hsba:workflow-steps');
+    let workflows: { steps: WorkflowStep[] }[];
+    if (cached) {
+      workflows = Object.values(cached).map((steps) => ({ steps: steps as unknown as WorkflowStep[] }));
+    } else {
+      const rows = await this.db.db
+        .select({ id: hsbaWorkflows.id, steps: hsbaWorkflows.steps })
+        .from(hsbaWorkflows)
+        .where(eq(hsbaWorkflows.active, true));
+      workflows = rows.map((r) => ({ steps: (r.steps ?? []) as WorkflowStep[] }));
+      await this.cache.set(
+        'hsba:workflow-steps',
+        Object.fromEntries(rows.map((r) => [String(r.id), r.steps ?? []])),
+        120,
+      );
+    }
+
+    const conditions: SQL[] = [];
+    for (const workflow of workflows) {
+      for (const step of workflow.steps) {
+        const who = this.signCondition(step, user);
+        if (!who) continue;
+        const pending = sql`${hsbaRequests.status} = ${`CHO_${step.key}`} and ${hsbaRequests.pendingStepKey} = ${step.key}`;
+        conditions.push(sql`(${pending}) and (${who})` as SQL);
+      }
+    }
+    if (conditions.length === 0) return null;
+    return or(...conditions) as SQL;
+  }
+
+  buildSearchCondition(query: RequestQueryDto, user: AccessContext, extra: SQL[] = []): SQL[] {
+    const where: SQL[] = [...extra];
     if (!query.includeDeleted) where.push(isNull(hsbaRequests.deletedAt));
 
     if (query.q?.trim()) {
       const kw = query.q.trim();
-      const normalized = normalizeVN(kw);
       const like = `%${kw}%`;
-      const loose = `%${normalized}%`;
+      // Chuỗi tìm kiếm đã bỏ dấu → gõ có dấu hay không dấu đều khớp
+      const loose = `%${normalizeVN(kw)}%`;
       where.push(
         or(
-          sql`unaccent(${hsbaRequests.patientName}) ILIKE unaccent(${loose})`,
-          sql`unaccent(${hsbaRequests.requesterName}) ILIKE unaccent(${loose})`,
+          sql`${hsbaRequests.searchText} like ${loose}`,
           ilike(hsbaRequests.maKcb, like),
           ilike(hsbaRequests.maTheBhyt, like),
           ilike(hsbaRequests.code, like),
           ilike(hsbaRequests.patientCode, like),
-          ilike(hsbaRequests.content, like),
         ) as SQL,
       );
     }
@@ -421,6 +515,34 @@ export class HsbaService {
         case 'pendingStepKey':
           where.push(eq(hsbaRequests.pendingStepKey, f.value));
           break;
+        case 'amount': {
+          // Số tiền lưu dạng chuỗi → so sánh bằng số (dùng cho lọc của tài chính)
+          const amount = Number(f.value);
+          if (!Number.isFinite(amount)) break;
+          const numeric = sql`coalesce(nullif(regexp_replace(${hsbaRequests.amount}, '[^0-9.-]', '', 'g'), ''), '0')::numeric`;
+          if (f.op === 'gte' || f.op === 'gt' || f.op === 'lte' || f.op === 'lt' || f.op === 'ne') {
+            const operators: Record<string, SQL> = {
+              gte: sql`${numeric} >= ${amount}`,
+              gt: sql`${numeric} > ${amount}`,
+              lte: sql`${numeric} <= ${amount}`,
+              lt: sql`${numeric} < ${amount}`,
+              ne: sql`${numeric} <> ${amount}`,
+            };
+            where.push(operators[f.op]);
+          } else {
+            where.push(sql`${numeric} = ${amount}`);
+          }
+          break;
+        }
+        case 'doiTuong':
+          where.push(eq(hsbaRequests.doiTuong, f.value));
+          break;
+        case 'patientGender':
+          where.push(eq(hsbaRequests.patientGender, f.value));
+          break;
+        case 'patientBirthYear':
+          where.push(eq(hsbaRequests.patientBirthYear, f.value));
+          break;
         case 'returnCount':
           where.push(
             f.op === 'gt'
@@ -436,7 +558,15 @@ export class HsbaService {
   }
 
   async list(query: RequestQueryDto, user: AccessContext): Promise<Paginated<Record<string, unknown>>> {
-    const where = this.buildSearchCondition(query, user);
+    const extra: SQL[] = [];
+    if (query.myTurn) {
+      const condition = await this.myTurnCondition(user);
+      // Không có bước nào thuộc về người dùng → danh sách rỗng
+      if (!condition) return buildPage<Record<string, unknown>>([], 0, query.page, query.pageSize);
+      extra.push(condition);
+    }
+
+    const where = this.buildSearchCondition(query, user, extra);
     const condition = where.length ? and(...where) : undefined;
 
     const [countRow] = await this.db.db
@@ -531,17 +661,9 @@ export class HsbaService {
   }
 
   /** Phiếu đang chờ chính người dùng hiện tại xử lý */
+  /** Phiếu đang chờ chính tôi xử lý — dùng chung điều kiện với bộ lọc myTurn của danh sách. */
   async myTurn(user: AccessContext, query: RequestQueryDto): Promise<Paginated<Record<string, unknown>>> {
-    const { steps } = await this.resolveWorkflow({ workflowId: null, departmentId: user.departmentId });
-    const stepKeys = steps
-      .filter((s) => this.canSign(s, { requesterId: user.id, createdBy: user.id, departmentId: user.departmentId }, user))
-      .map((s) => s.key);
-    const pending = stepKeys.length ? stepKeys : ['__none__'];
-    const list = await this.list(
-      { ...query, filters: undefined, status: pending.map((k) => `CHO_${k}`).join('|') } as RequestQueryDto,
-      user,
-    );
-    return list;
+    return this.list({ ...query, myTurn: true } as RequestQueryDto, user);
   }
 
   async findOne(id: number, user?: AccessContext) {
@@ -683,7 +805,7 @@ export class HsbaService {
       const code = makeCode('SDS', row.id);
       const [updated] = await tx
         .update(hsbaRequests)
-        .set({ code })
+        .set({ code, searchText: buildSearchText({ ...row, code }) })
         .where(eq(hsbaRequests.id, row.id))
         .returning();
 
@@ -753,6 +875,17 @@ export class HsbaService {
         departmentName: dto.departmentName,
         workflowId: dto.workflowId,
         updatedAt: new Date(),
+        searchText: buildSearchText({
+          code: current.code,
+          patientName: dto.patientName ?? current.patientName,
+          patientCode: dto.patientCode ?? current.patientCode,
+          requesterName: dto.requesterName ?? current.requesterName,
+          departmentName: dto.departmentName ?? current.departmentName,
+          maKcb: dto.maKcb ?? current.maKcb,
+          maTheBhyt: dto.maTheBhyt ?? current.maTheBhyt,
+          content: dto.content ?? current.content,
+          reason: dto.reason ?? current.reason,
+        }),
       })
       .where(eq(hsbaRequests.id, id))
       .returning();
@@ -970,7 +1103,15 @@ export class HsbaService {
   /* ------------------------------------------------------------ Thống kê */
 
   async stats(user: AccessContext, query: RequestQueryDto) {
-    const where = this.buildSearchCondition(query, user);
+    const extra: SQL[] = [];
+    if (query.myTurn) {
+      const condition = await this.myTurnCondition(user);
+      // Không có bước nào thuộc về người dùng → danh sách rỗng
+      if (!condition) return buildPage<Record<string, unknown>>([], 0, query.page, query.pageSize);
+      extra.push(condition);
+    }
+
+    const where = this.buildSearchCondition(query, user, extra);
     const condition = where.length ? and(...where) : undefined;
 
     const rows = await this.db.db

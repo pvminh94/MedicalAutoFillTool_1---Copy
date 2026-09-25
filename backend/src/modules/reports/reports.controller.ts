@@ -242,7 +242,7 @@ export class ReportSnapshotController {
   }
 
   @Patch(':id/status')
-  @RequirePermissions('report.snapshot.approve')
+  @RequirePermissions(['report.snapshot.approve', 'report.snapshot.lock'], 'any')
   @Audit({ module: 'REPORT', action: 'UPDATE', entity: 'report_snapshot', description: 'Duyệt/khoá báo cáo đã chốt' })
   @ApiOperation({ summary: 'Duyệt hoặc khoá bản chốt số liệu' })
   status(

@@ -11,6 +11,7 @@ import {
   scheduledJobs,
   users,
 } from '../../db/schema';
+import { CacheService } from '../../infra/cache/cache.service';
 import { CurrentUser } from '../../common/decorators';
 import type { AccessContext } from '../../common/types/access-context';
 import { resolvePeriod, eachDay, addDays, today } from '../../common/utils/date.util';
@@ -23,12 +24,25 @@ import { resolvePeriod, eachDay, addDays, today } from '../../common/utils/date.
 @ApiBearerAuth()
 @Controller('dashboard')
 export class DashboardController {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly cache: CacheService,
+  ) {}
 
   @Get('summary')
   @ApiOperation({ summary: 'Số liệu tổng quan: hồ sơ, báo cáo, người dùng, tác vụ, nhật ký' })
   async summary(@CurrentUser() user: AccessContext, @Query('days') days?: string) {
     const span = Math.min(Math.max(Number(days ?? 14) || 14, 7), 90);
+    // Trang chủ được mở rất thường xuyên → giữ kết quả 20 giây theo từng phạm vi dữ liệu
+    const scopeKey = user.isSuperAdmin
+      ? 'all'
+      : `${user.dataScope}:${user.departmentIds.join('-') || user.departmentId || 0}:${user.id}`;
+    return this.cache.remember(`dashboard:summary:${scopeKey}:${span}`, 20, () =>
+      this.buildSummary(user, span),
+    );
+  }
+
+  private async buildSummary(user: AccessContext, span: number) {
     const from = addDays(today(), -span + 1);
     const period = resolvePeriod('day', today());
 

@@ -6,10 +6,12 @@ import {
   ChevronRight,
   ClipboardList,
   FileDown,
+  Filter,
   PenLine,
   RefreshCw,
   Search,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -69,6 +71,38 @@ function RequestsContent() {
   const [mine, setMine] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [departmentId, setDepartmentId] = useState('');
+  const [priority, setPriority] = useState('');
+  const [amountFrom, setAmountFrom] = useState('');
+  const [amountTo, setAmountTo] = useState('');
+  const [doiTuong, setDoiTuong] = useState('');
+  const [returnedOnly, setReturnedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('createdAt');
+
+  const { data: departmentOptions } = useQuery({
+    queryKey: ['departments-options'],
+    queryFn: () => apiFetch<{ id: number; name: string; level: number }[]>('/departments/options'),
+  });
+
+  const advancedCount = [
+    departmentId,
+    priority,
+    amountFrom,
+    amountTo,
+    doiTuong,
+    returnedOnly ? 'x' : '',
+  ].filter(Boolean).length;
+
+  const clearAdvanced = (): void => {
+    setDepartmentId('');
+    setPriority('');
+    setAmountFrom('');
+    setAmountTo('');
+    setDoiTuong('');
+    setReturnedOnly(false);
+    setPage(1);
+  };
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
@@ -80,8 +114,17 @@ function RequestsContent() {
     if (mine) p.set('mine', 'true');
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo) p.set('dateTo', dateTo);
+    if (departmentId) p.set('departmentId', departmentId);
+    if (sortBy !== 'createdAt') p.set('sortBy', sortBy);
+    const filters: string[] = [];
+    if (priority) filters.push(`priority:eq:${priority}`);
+    if (doiTuong) filters.push(`doiTuong:eq:${doiTuong}`);
+    if (amountFrom) filters.push(`amount:gte:${amountFrom}`);
+    if (amountTo) filters.push(`amount:lte:${amountTo}`);
+    if (returnedOnly) filters.push('returnCount:gt:0');
+    if (filters.length) p.set('filters', filters.join(','));
     return p.toString();
-  }, [page, search, status, myTurn, mine, dateFrom, dateTo]);
+  }, [page, search, status, myTurn, mine, dateFrom, dateTo, departmentId, priority, amountFrom, amountTo, doiTuong, returnedOnly, sortBy]);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['hsba-requests', query],
@@ -193,10 +236,85 @@ function RequestsContent() {
             <option value="">Bộ lọc nâng cao</option>
           </Select>
 
-          <Button variant="outline" size="sm" className="ml-auto" onClick={() => refetch()} title="Tải lại">
+          <Button
+            variant={showAdvanced ? 'default' : 'outline'}
+            size="sm"
+            className="ml-auto"
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            <Filter /> Bộ lọc nâng cao
+            {advancedCount > 0 ? (
+              <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-semibold">{advancedCount}</span>
+            ) : null}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => refetch()} title="Tải lại">
             <RefreshCw className={cn(isFetching && 'animate-spin')} />
           </Button>
         </div>
+
+        {showAdvanced ? (
+          <div className="grid gap-3 border-b bg-[var(--muted)]/40 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-[var(--muted-foreground)]">Khoa đề nghị</label>
+              <Select value={departmentId} onChange={(e) => { setDepartmentId(e.target.value); setPage(1); }} className="h-8.5 text-sm">
+                <option value="">— Mọi khoa —</option>
+                {(departmentOptions ?? []).map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {'— '.repeat(Math.max(0, d.level - 1))}
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-[var(--muted-foreground)]">Mức ưu tiên</label>
+              <Select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} className="h-8.5 text-sm">
+                <option value="">— Tất cả —</option>
+                <option value="URGENT">Khẩn cấp</option>
+                <option value="HIGH">Ưu tiên</option>
+                <option value="NORMAL">Bình thường</option>
+                <option value="LOW">Thấp</option>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-[var(--muted-foreground)]">Đối tượng</label>
+              <Select value={doiTuong} onChange={(e) => { setDoiTuong(e.target.value); setPage(1); }} className="h-8.5 text-sm">
+                <option value="">— Tất cả —</option>
+                <option value="BHYT">BHYT</option>
+                <option value="Thu phí">Thu phí</option>
+                <option value="Miễn">Miễn</option>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-[var(--muted-foreground)]">Sắp xếp theo</label>
+              <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-8.5 text-sm">
+                <option value="createdAt">Ngày tạo (mới nhất)</option>
+                <option value="updatedAt">Cập nhật gần nhất</option>
+                <option value="patientName">Tên người bệnh</option>
+                <option value="code">Số phiếu</option>
+                <option value="status">Trạng thái</option>
+                <option value="ngayVaoVien">Ngày vào viện</option>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-[var(--muted-foreground)]">Số tiền từ (đồng)</label>
+              <Input value={amountFrom} onChange={(e) => { setAmountFrom(e.target.value.replace(/[^\d]/g, '')); setPage(1); }} placeholder="0" className="h-8.5 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-[var(--muted-foreground)]">Số tiền đến (đồng)</label>
+              <Input value={amountTo} onChange={(e) => { setAmountTo(e.target.value.replace(/[^\d]/g, '')); setPage(1); }} placeholder="Không giới hạn" className="h-8.5 text-sm" />
+            </div>
+            <label className="flex items-center gap-2 self-end text-sm">
+              <input type="checkbox" checked={returnedOnly} onChange={(e) => { setReturnedOnly(e.target.checked); setPage(1); }} />
+              Chỉ phiếu đã bị trả lại
+            </label>
+            <div className="flex items-end">
+              <Button variant="ghost" size="sm" onClick={clearAdvanced} disabled={advancedCount === 0}>
+                <X /> Xoá bộ lọc nâng cao
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {isLoading ? (
           <div className="space-y-2 p-4">

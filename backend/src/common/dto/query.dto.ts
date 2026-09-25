@@ -15,8 +15,18 @@ import {
 } from 'class-validator';
 import { config } from '../../config/env';
 
-const toBool = ({ value }: { value: unknown }): boolean | undefined =>
-  value === undefined || value === '' ? undefined : ['1', 'true', 'yes', 'on'].includes(String(value));
+/**
+ * Chuyển tham số chuỗi trên URL ("true", "1", "on"…) thành boolean.
+ * Tham số truy vấn luôn là chuỗi nên mọi trường boolean trong DTO truy vấn đều cần hàm này.
+ */
+export const toBoolean = ({ value }: { value: unknown }): boolean | undefined => {
+  if (value === undefined || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+};
+
+/** Giữ tên cũ cho các DTO đang dùng. */
+const toBool = toBoolean;
 
 const toArray = ({ value }: { value: unknown }): string[] | undefined => {
   if (value === undefined || value === '') return undefined;

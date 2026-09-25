@@ -162,7 +162,11 @@ export class HsbaRequestController {
   }
 
   @Post(':id/sign')
-  @RequirePermissions('hsba.request.create')
+  // Bước ký nào do quy trình quyết định → chỉ cần có một trong các quyền ký
+  @RequirePermissions(
+    ['hsba.request.sign-requester', 'hsba.request.sign-khtb', 'hsba.request.sign-finance'],
+    'any',
+  )
   @Audit({ module: 'HSBA', action: 'SIGN', entity: 'hsba_request', description: 'Ký phiếu đề nghị sửa HSBA' })
   @ApiOperation({ summary: 'Ký ở bước đang chờ (kiểm tra theo cấu hình quy trình)' })
   sign(
@@ -175,7 +179,10 @@ export class HsbaRequestController {
   }
 
   @Post('bulk-sign')
-  @RequirePermissions('hsba.request.create')
+  @RequirePermissions(
+    ['hsba.request.sign-requester', 'hsba.request.sign-khtb', 'hsba.request.sign-finance'],
+    'any',
+  )
   @ApiOperation({ summary: 'Ký nhiều phiếu đang chờ tôi xử lý trong một lần' })
   bulkSign(
     @Body() dto: BulkSignDto,

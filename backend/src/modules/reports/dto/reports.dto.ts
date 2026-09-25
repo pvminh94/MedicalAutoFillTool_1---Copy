@@ -11,7 +11,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { AdvancedQueryDto } from '../../../common/dto/query.dto';
+import { AdvancedQueryDto, toBoolean } from '../../../common/dto/query.dto';
 
 const toBool = ({ value }: { value: unknown }): boolean | undefined =>
   value === undefined || value === '' ? undefined : ['1', 'true', 'yes', 'on'].includes(String(value));
@@ -80,6 +80,7 @@ export class ColumnInputDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   archived?: boolean;
 }
@@ -114,11 +115,13 @@ export class RowInputDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   isBold?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   isTotal?: boolean;
 
@@ -139,6 +142,7 @@ export class RowInputDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   archived?: boolean;
 }
@@ -257,11 +261,13 @@ export class CreateReportTemplateDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   isDefault?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   active?: boolean;
 
@@ -305,6 +311,7 @@ export class SaveStructureDto {
 
   @ApiPropertyOptional({ description: 'Xoá cứng các cột/dòng không còn trong cấu trúc gửi lên' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   purge?: boolean;
 }
@@ -341,6 +348,7 @@ export class UpsertEntriesDto {
 
   @ApiPropertyOptional({ description: 'Nhập một lần cho cả kỳ: mọi giá trị được ghi vào ngày kết thúc kỳ' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   forPeriod?: boolean;
 
@@ -362,6 +370,7 @@ export class UpsertEntriesDto {
 
   @ApiPropertyOptional({ description: 'Không ghi đè các ô đã có số liệu khác 0' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   skipExisting?: boolean;
 }

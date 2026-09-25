@@ -134,6 +134,11 @@ export const hsbaRequests = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    /**
+     * Chuỗi tìm kiếm đã bỏ dấu, viết thường (tên người bệnh, mã KCB, mã thẻ, số phiếu…).
+     * Nhờ vậy tra cứu "hồng ánh" hay "hong anh" đều khớp mà không cần tiện ích CSDL.
+     */
+    searchText: text('search_text').default('').notNull(),
   },
   (t) => [
     uniqueIndex('hsba_requests_code_uq').on(t.code),
@@ -143,6 +148,9 @@ export const hsbaRequests = pgTable(
     index('hsba_requests_requester_idx').on(t.requesterId),
     index('hsba_requests_creator_idx').on(t.createdBy),
     index('hsba_requests_patient_idx').on(t.patientName),
+    index('hsba_requests_search_text_idx').on(t.searchText),
+    index('hsba_requests_status_created_idx').on(t.status, t.createdAt),
+    index('hsba_requests_dept_created_idx').on(t.departmentId, t.createdAt),
     index('hsba_requests_search_idx').using(
       'gin',
       sql`to_tsvector('simple', ${t.patientName} || ' ' || ${t.maKcb} || ' ' || ${t.code} || ' ' || ${t.maTheBhyt} || ' ' || ${t.requesterName})`,

@@ -23,7 +23,9 @@
     "db:studio": "drizzle-kit studio",
     "admin:create": "tsx scripts/create-admin.ts",
     "dev:postgres": "tsx scripts/dev-postgres.ts",
-    "test": "node --test --import tsx test/*.test.ts"
+    "test": "node --test --import tsx test/*.test.ts",
+    "db:demo": "tsx scripts/demo-data.ts",
+    "db:backfill-search": "tsx scripts/backfill-search-text.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.6",

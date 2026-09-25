@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { BarChart3, FileDown, FileSpreadsheet, FileText, Printer, RefreshCw } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Archive, BarChart3, FileDown, FileSpreadsheet, FileText, Lock, Printer, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader, StatCard } from '@/components/shared/page-header';
@@ -9,10 +9,30 @@ import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
+import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { apiFetch, downloadFile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { cn, formatNumber, todayISO } from '@/lib/utils';
+import { cn, formatDateTime, formatNumber, todayISO } from '@/lib/utils';
 import type { Paginated } from '@/types/api';
+
+interface SnapshotRow {
+  id: number;
+  templateId: number;
+  departmentId: number | null;
+  title: string;
+  periodLabel: string;
+  status: 'DRAFT' | 'APPROVED' | 'LOCKED';
+  dateFrom: string;
+  dateTo: string;
+  createdAt: string;
+  createdBy: number;
+}
+
+const SNAPSHOT_STATUS: Record<string, { label: string; tone: 'muted' | 'info' | 'success' }> = {
+  DRAFT: { label: 'Bản nháp', tone: 'muted' },
+  APPROVED: { label: 'Đã duyệt', tone: 'info' },
+  LOCKED: { label: 'Đã khoá', tone: 'success' },
+};
 
 interface TemplateRow {
   id: number;
@@ -69,6 +89,9 @@ const PERIODS = [
 
 export default function ReportViewPage() {
   const can = useAuth((s) => s.can);
+  const queryClient = useQueryClient();
+  const [showSnapshots, setShowSnapshots] = useState(false);
+  const [confirmLock, setConfirmLock] = useState<SnapshotRow | null>(null);
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [period, setPeriod] = useState('week');
   const [date, setDate] = useState(todayISO());
@@ -94,6 +117,42 @@ export default function ReportViewPage() {
     queryKey: ['report-view', query],
     enabled: !!activeTemplateId,
     queryFn: () => apiFetch<ReportBuild>(`/reports/view?${query}`),
+  });
+
+  const { data: snapshots } = useQuery({
+    queryKey: ['report-snapshots', activeTemplateId],
+    enabled: showSnapshots && !!activeTemplateId,
+    queryFn: () => apiFetch<Paginated<SnapshotRow>>(`/reports/snapshots?templateId=${activeTemplateId}&pageSize=50`),
+  });
+
+  const createSnapshot = useMutation({
+    mutationFn: () =>
+      apiFetch('/reports/snapshots', {
+        method: 'POST',
+        body: {
+          templateId: activeTemplateId,
+          period,
+          date,
+          dateTo: period === 'range' ? dateTo : undefined,
+        },
+      }),
+    onSuccess: async () => {
+      toast.success('Đã chốt số liệu kỳ báo cáo');
+      setShowSnapshots(true);
+      await queryClient.invalidateQueries({ queryKey: ['report-snapshots'] });
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const setSnapshotStatus = useMutation({
+    mutationFn: (payload: { id: number; status: 'DRAFT' | 'APPROVED' | 'LOCKED' }) =>
+      apiFetch(`/reports/snapshots/${payload.id}/status`, { method: 'PATCH', body: { status: payload.status } }),
+    onSuccess: async () => {
+      toast.success('Đã cập nhật trạng thái bản chốt');
+      setConfirmLock(null);
+      await queryClient.invalidateQueries({ queryKey: ['report-snapshots'] });
+    },
+    onError: (err) => toast.error((err as Error).message),
   });
 
   const exportFile = async (format: 'excel' | 'word' | 'pdf'): Promise<void> => {
@@ -131,6 +190,14 @@ export default function ReportViewPage() {
             {can('report.export.pdf') ? (
               <Button variant="outline" onClick={() => exportFile('pdf')}>
                 <FileDown /> PDF
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setShowSnapshots(true)}>
+              <Archive /> Bản chốt số liệu
+            </Button>
+            {can('report.snapshot.create') ? (
+              <Button variant="outline" loading={createSnapshot.isPending} onClick={() => createSnapshot.mutate()}>
+                <ShieldCheck /> Chốt số liệu kỳ này
               </Button>
             ) : null}
             <Button onClick={() => window.print()}>
@@ -182,6 +249,57 @@ export default function ReportViewPage() {
           ) : null}
         </div>
       </Card>
+
+      <Dialog
+        open={showSnapshots}
+        onClose={() => setShowSnapshots(false)}
+        size="lg"
+        title="Bản chốt số liệu báo cáo"
+        description="Số liệu được lưu lại nguyên trạng theo kỳ — không bị ảnh hưởng khi sửa số liệu về sau"
+      >
+        {!snapshots || snapshots.items.length === 0 ? (
+          <EmptyState
+            title="Chưa có bản chốt nào"
+            description="Bấm “Chốt số liệu kỳ này” để lưu lại số liệu hiện tại kèm dấu thời gian và người chốt."
+          />
+        ) : (
+          <div className="space-y-2">
+            {snapshots.items.map((s) => (
+              <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{s.title}</div>
+                  <div className="text-[11px] text-[var(--muted-foreground)]">
+                    {s.periodLabel} · {s.dateFrom} → {s.dateTo} · chốt lúc {formatDateTime(s.createdAt)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge tone={SNAPSHOT_STATUS[s.status]?.tone ?? 'muted'}>{SNAPSHOT_STATUS[s.status]?.label ?? s.status}</Badge>
+                  {can('report.snapshot.approve') && s.status === 'DRAFT' ? (
+                    <Button size="sm" variant="outline" onClick={() => setSnapshotStatus.mutate({ id: s.id, status: 'APPROVED' })}>
+                      Duyệt
+                    </Button>
+                  ) : null}
+                  {can('report.snapshot.lock') && s.status !== 'LOCKED' ? (
+                    <Button size="sm" variant="outline" onClick={() => setConfirmLock(s)}>
+                      <Lock /> Khoá
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmLock}
+        title="Khoá bản chốt số liệu"
+        message={<>Khoá <b>{confirmLock?.title}</b>? Sau khi khoá, số liệu của kỳ này được coi là số liệu chính thức.</>}
+        confirmText="Khoá"
+        loading={setSnapshotStatus.isPending}
+        onConfirm={() => confirmLock && setSnapshotStatus.mutate({ id: confirmLock.id, status: 'LOCKED' })}
+        onClose={() => setConfirmLock(null)}
+      />
 
       {isLoading || !data ? (
         <Skeleton className="h-96" />

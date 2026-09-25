@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -12,7 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { AdvancedQueryDto } from '../../../common/dto/query.dto';
+import { AdvancedQueryDto, toBoolean } from '../../../common/dto/query.dto';
 
 /* ------------------------------------------------------------------ Quy trình ký */
 
@@ -47,11 +47,13 @@ export class WorkflowStepDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   allowReturn?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   requireNote?: boolean;
 }
@@ -79,6 +81,7 @@ export class CreateWorkflowDto {
 
   @ApiPropertyOptional({ description: 'Áp dụng làm quy trình mặc định' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   isDefault?: boolean;
 
@@ -90,6 +93,7 @@ export class CreateWorkflowDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   active?: boolean;
 }
@@ -215,6 +219,7 @@ export class CreateRequestDto {
 
   @ApiPropertyOptional({ description: 'Ký xác nhận ngay khi tạo (nếu tài khoản tạo chính là người đề nghị)' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   signNow?: boolean;
 
@@ -265,11 +270,13 @@ export class RequestQueryDto extends AdvancedQueryDto {
 
   @ApiPropertyOptional({ description: 'Chỉ lấy phiếu đang chờ chính tôi xử lý' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   myTurn?: boolean;
 
   @ApiPropertyOptional({ description: 'Chỉ lấy phiếu do tôi tạo hoặc tôi là người đề nghị' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   mine?: boolean;
 }

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -12,7 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { AdvancedQueryDto } from '../../../common/dto/query.dto';
+import { AdvancedQueryDto, toBoolean } from '../../../common/dto/query.dto';
 
 export class CreateDepartmentDto {
   @ApiProperty({ example: 'KPK', description: 'Mã đơn vị (duy nhất, không dấu)' })
@@ -78,6 +78,7 @@ export class CreateDepartmentDto {
 
   @ApiPropertyOptional({ description: 'Có nhập báo cáo công tác không' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   reportEnabled?: boolean;
 
@@ -94,6 +95,7 @@ export class CreateDepartmentDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   active?: boolean;
 }
@@ -115,11 +117,13 @@ export class DepartmentQueryDto extends AdvancedQueryDto {
 
   @ApiPropertyOptional({ description: 'Chỉ lấy khoa có bật báo cáo' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   reportEnabled?: boolean;
 
   @ApiPropertyOptional({ description: 'Trả về dạng cây phân cấp' })
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   tree?: boolean;
 }
