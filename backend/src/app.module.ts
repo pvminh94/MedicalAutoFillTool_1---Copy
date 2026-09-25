@@ -21,6 +21,11 @@ import { HealthModule } from './modules/health/health.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { PrintingModule } from './modules/printing/printing.module';
+import { HsbaModule } from './modules/hsba/hsba.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UtilitiesModule } from './modules/utilities/utilities.module';
 
@@ -51,6 +56,12 @@ const envFile = [
     SettingsModule,
     UtilitiesModule,
     SchedulerModule,
+    // Phân hệ nghiệp vụ
+    PrintingModule,
+    HsbaModule,
+    ReportsModule,
+    NotificationsModule,
+    DashboardModule,
     // Kiểm tra tình trạng
     HealthModule,
   ],

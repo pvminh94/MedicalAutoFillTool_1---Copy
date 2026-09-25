@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable, map } from 'rxjs';
 
@@ -27,6 +28,7 @@ export class TransformInterceptor<T> implements NestInterceptor<T, ApiEnvelope<T
         const disposition = res.getHeader?.('content-disposition');
         if (disposition) return data;
         if (data instanceof Buffer || data instanceof Uint8Array) return data;
+        if (data instanceof StreamableFile) return data;
         if (data && typeof data === 'object' && 'success' in (data as object)) {
           return data;
         }

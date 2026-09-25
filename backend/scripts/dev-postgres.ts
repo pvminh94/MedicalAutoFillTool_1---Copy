@@ -37,7 +37,9 @@ async function main(): Promise<void> {
   const version = await db.query<{ version: string }>('select version() as version');
   const versionText = (version.rows[0]?.version ?? '').split(' on ')[0];
 
-  const server = new PGLiteSocketServer({ db, port, host });
+  // maxConnections > 1 vì ứng dụng dùng pool kết nối (mặc định PGlite chỉ cho 1)
+  const maxConnections = Number(process.env.PG_MAX_CONNECTIONS ?? 10);
+  const server = new PGLiteSocketServer({ db, port, host, maxConnections });
   await server.start();
 
   const url = `postgresql://postgres:postgres@${host}:${port}/postgres`;
@@ -47,7 +49,7 @@ async function main(): Promise<void> {
 ╚════════════════════════════════════════════════════════════╝
   Phiên bản : ${versionText}
   Dữ liệu   : ${dataDir}
-  Địa chỉ   : ${host}:${port}
+  Địa chỉ   : ${host}:${port}  (tối đa ${maxConnections} kết nối)
 
   Thêm dòng sau vào backend/.env:
 
