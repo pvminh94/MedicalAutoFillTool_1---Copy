@@ -1,0 +1,26 @@
+# =============================================================================
+# Line ending — QUAN TRỌNG cho người dùng Windows của dự án này.
+#
+# Repo lưu source dạng LF cho gọn diff, RIÊNG file batch thì phải có CRLF ở
+# CHÍNH BYTE LƯU TRONG REPO (đánh dấu `-text` để git không bao giờ chuẩn hoá).
+# Lý do: cmd.exe đọc file .bat theo từng byte; với LF thuần nó có thể chạy sai
+# ở những chỗ nhạy cảm — đặc biệt là quét nhãn `:label` cho `goto` và các khối
+# `if ( ... )` nhiều dòng. Đặt `eol=crlf` là CHƯA ĐỦ vì GitHub "Download ZIP"
+# xuất nguyên blob trong repo, không áp .gitattributes; chỉ `-text` + byte CRLF
+# mới đúng cho cả `git clone` lẫn tải ZIP.
+# =============================================================================
+*.bat -text
+*.cmd -text
+
+# Script chạy trên Linux/CI: bắt buộc LF (CRLF sẽ làm `bash: \r: command not found`)
+*.sh text eol=lf
+
+# Nhị phân: không bao giờ đổi byte, không diff
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.exe binary
+*.dll binary
+*.resx -text

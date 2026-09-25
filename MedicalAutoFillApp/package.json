@@ -1,0 +1,49 @@
+{
+  "name": "medical-autofill-app",
+  "version": "2.0.0",
+  "description": "Medical Auto Fill Tool — bản Electron (dùng chung Shared/maf-engine.js)",
+  "main": "main.js",
+  "author": "pvminh94",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "npx electron-builder --win portable",
+    "build:dir": "npx electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "com.medical.autofill",
+    "productName": "MedicalAutoFill",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../Shared",
+        "to": "Shared",
+        "filter": [
+          "maf-engine.js",
+          "default-profiles.json"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "MedicalAutoFill-${version}-portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3"
+  }
+}

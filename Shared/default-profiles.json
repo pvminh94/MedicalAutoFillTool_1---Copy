@@ -1,0 +1,510 @@
+{
+  "$schema-note": "FILE NÀY ĐƯỢC SINH TỰ ĐỘNG từ BuiltinProfiles.cs — ĐỪNG SỬA TAY.",
+  "$regen": "python3 Tests/generate-default-profiles.py",
+  "$purpose": "Cấu hình form mặc định dùng chung cho các bản không có CSDL (Electron, script DevTools). Bản WinForms đọc BuiltinProfiles.cs, bản Web đọc SQLite do DbSeeder seed.",
+  "version": 2,
+  "forms": [
+    {
+      "id": "CanLamSang",
+      "name": "Phiếu Cận Lâm Sàng (KSKDK)",
+      "urlContains": "KSKDK_Phieu_CanLamSang",
+      "description": null,
+      "fields": [
+        {
+          "excelIndex": 0,
+          "controlType": "text",
+          "labels": [
+            "Mã KCB",
+            "Ma KCB",
+            "makcb"
+          ],
+          "headerNames": [
+            "Mã KCB",
+            "Ma KCB",
+            "makcb"
+          ]
+        },
+        {
+          "excelIndex": 1,
+          "controlType": "text",
+          "labels": [
+            "Họ và tên",
+            "Ho va ten",
+            "hoten"
+          ],
+          "headerNames": [
+            "Họ và tên",
+            "Ho va ten",
+            "hoten"
+          ]
+        },
+        {
+          "excelIndex": 2,
+          "controlType": "date",
+          "labels": [
+            "Ngày sinh",
+            "Ngay sinh",
+            "ngaysinh"
+          ],
+          "headerNames": [
+            "Ngày sinh",
+            "Ngay sinh",
+            "ngaysinh"
+          ]
+        },
+        {
+          "excelIndex": 3,
+          "controlType": "auto",
+          "labels": [
+            "Phái",
+            "Giới tính",
+            "phai",
+            "gioitinh"
+          ],
+          "headerNames": [
+            "Phái",
+            "Giới tính",
+            "phai",
+            "gioitinh"
+          ]
+        },
+        {
+          "excelIndex": 4,
+          "controlType": "text",
+          "labels": [
+            "Số lượng HC (M/µL)",
+            "Số lượng HC (T/L)"
+          ],
+          "headerNames": [
+            "Số lượng HC (M/µL)",
+            "Số lượng HC (T/L)"
+          ]
+        },
+        {
+          "excelIndex": 5,
+          "controlType": "text",
+          "labels": [
+            "Huyết sắc tố (g/dL)",
+            "Huyết sắc tố (g/L)"
+          ],
+          "headerNames": [
+            "Huyết sắc tố (g/dL)",
+            "Huyết sắc tố (g/L)"
+          ]
+        },
+        {
+          "excelIndex": 6,
+          "controlType": "text",
+          "labels": [
+            "Hematocrit (g/dL)",
+            "Hematocrit (L/L)"
+          ],
+          "headerNames": [
+            "Hematocrit (g/dL)",
+            "Hematocrit (L/L)"
+          ]
+        },
+        {
+          "excelIndex": 7,
+          "controlType": "text",
+          "labels": [
+            "MCV (fL)"
+          ],
+          "headerNames": [
+            "MCV (fL)"
+          ]
+        },
+        {
+          "excelIndex": 8,
+          "controlType": "text",
+          "labels": [
+            "MCH (pg)"
+          ],
+          "headerNames": [
+            "MCH (pg)"
+          ]
+        },
+        {
+          "excelIndex": 9,
+          "controlType": "text",
+          "labels": [
+            "MCHC (g/dL)",
+            "MCHC (g/L)"
+          ],
+          "headerNames": [
+            "MCHC (g/dL)",
+            "MCHC (g/L)"
+          ]
+        },
+        {
+          "excelIndex": 10,
+          "controlType": "text",
+          "labels": [
+            "RDW (%)"
+          ],
+          "headerNames": [
+            "RDW (%)"
+          ]
+        },
+        {
+          "excelIndex": 11,
+          "controlType": "text",
+          "labels": [
+            "Số lượng bạch cầu (K/µL)",
+            "Số lượng bạch cầu (G/L)"
+          ],
+          "headerNames": [
+            "Số lượng bạch cầu (K/µL)",
+            "Số lượng bạch cầu (G/L)"
+          ]
+        },
+        {
+          "excelIndex": 12,
+          "controlType": "text",
+          "labels": [
+            "Số lượng bạch cầu trung tính (K/µL)",
+            "Số lượng bạch cầu trung tính (G/L)"
+          ],
+          "headerNames": [
+            "Số lượng bạch cầu trung tính (K/µL)",
+            "Số lượng bạch cầu trung tính (G/L)"
+          ]
+        },
+        {
+          "excelIndex": 13,
+          "controlType": "text",
+          "labels": [
+            "Số lượng bạch cầu lympho (K/µL)",
+            "Số lượng bạch cầu lympho (G/L)"
+          ],
+          "headerNames": [
+            "Số lượng bạch cầu lympho (K/µL)",
+            "Số lượng bạch cầu lympho (G/L)"
+          ]
+        },
+        {
+          "excelIndex": 14,
+          "controlType": "text",
+          "labels": [
+            "Số lượng bạch cầu đơn nhân (K/µL)",
+            "Số lượng bạch cầu đơn nhân (G/L)"
+          ],
+          "headerNames": [
+            "Số lượng bạch cầu đơn nhân (K/µL)",
+            "Số lượng bạch cầu đơn nhân (G/L)"
+          ]
+        },
+        {
+          "excelIndex": 15,
+          "controlType": "text",
+          "labels": [
+            "Số lượng bạch cầu ái toan (K/µL)",
+            "Số lượng bạch cầu ái toan (G/L)"
+          ],
+          "headerNames": [
+            "Số lượng bạch cầu ái toan (K/µL)",
+            "Số lượng bạch cầu ái toan (G/L)"
+          ]
+        },
+        {
+          "excelIndex": 16,
+          "controlType": "text",
+          "labels": [
+            "Số lượng bạch cầu ái kiềm (K/µL)",
+            "Số lượng bạch cầu ái kiềm (G/L)"
+          ],
+          "headerNames": [
+            "Số lượng bạch cầu ái kiềm (K/µL)",
+            "Số lượng bạch cầu ái kiềm (G/L)"
+          ]
+        },
+        {
+          "excelIndex": 17,
+          "controlType": "text",
+          "labels": [
+            "Số lượng tiểu cầu (K/µL)",
+            "Số lượng tiểu cầu (G/L)"
+          ],
+          "headerNames": [
+            "Số lượng tiểu cầu (K/µL)",
+            "Số lượng tiểu cầu (G/L)"
+          ]
+        },
+        {
+          "excelIndex": 18,
+          "controlType": "text",
+          "labels": [
+            "Đường máu bất kỳ (mmol/L)"
+          ],
+          "headerNames": [
+            "Đường máu bất kỳ (mmol/L)"
+          ]
+        },
+        {
+          "excelIndex": 19,
+          "controlType": "text",
+          "labels": [
+            "Đường máu lúc đói (mmol/L)"
+          ],
+          "headerNames": [
+            "Đường máu lúc đói (mmol/L)"
+          ]
+        },
+        {
+          "excelIndex": 20,
+          "controlType": "text",
+          "labels": [
+            "Urê (mmol/L)"
+          ],
+          "headerNames": [
+            "Urê (mmol/L)"
+          ]
+        },
+        {
+          "excelIndex": 21,
+          "controlType": "text",
+          "labels": [
+            "Creatinin (umol/L)",
+            "Creatinin (µmol/L)"
+          ],
+          "headerNames": [
+            "Creatinin (umol/L)",
+            "Creatinin (µmol/L)"
+          ]
+        },
+        {
+          "excelIndex": 22,
+          "controlType": "text",
+          "labels": [
+            "ASAT(GOT)",
+            "ASAT(GOT) (U/L)",
+            "GOT (U/L)"
+          ],
+          "headerNames": [
+            "ASAT(GOT)",
+            "ASAT(GOT) (U/L)",
+            "GOT (U/L)"
+          ]
+        },
+        {
+          "excelIndex": 23,
+          "controlType": "text",
+          "labels": [
+            "ALAT (GPT)",
+            "ALAT (GPT) (U/L)",
+            "GPT (U/L)"
+          ],
+          "headerNames": [
+            "ALAT (GPT)",
+            "ALAT (GPT) (U/L)",
+            "GPT (U/L)"
+          ]
+        },
+        {
+          "excelIndex": 24,
+          "controlType": "text",
+          "labels": [
+            "Tỉ trọng"
+          ],
+          "headerNames": [
+            "Tỉ trọng"
+          ]
+        },
+        {
+          "excelIndex": 25,
+          "controlType": "text",
+          "labels": [
+            "pH"
+          ],
+          "headerNames": [
+            "pH"
+          ]
+        },
+        {
+          "excelIndex": 26,
+          "controlType": "text",
+          "labels": [
+            "Bạch cầu (Leu/uL)"
+          ],
+          "headerNames": [
+            "Bạch cầu (Leu/uL)"
+          ]
+        },
+        {
+          "excelIndex": 27,
+          "controlType": "text",
+          "labels": [
+            "Hồng cầu (Ery/uL)"
+          ],
+          "headerNames": [
+            "Hồng cầu (Ery/uL)"
+          ]
+        },
+        {
+          "excelIndex": 28,
+          "controlType": "text",
+          "labels": [
+            "Protein (mg/dL)",
+            "Protein (g/L)"
+          ],
+          "headerNames": [
+            "Protein (mg/dL)",
+            "Protein (g/L)"
+          ]
+        },
+        {
+          "excelIndex": 29,
+          "controlType": "text",
+          "labels": [
+            "Glucose (mg/dL)",
+            "Glucose (mmol/L)"
+          ],
+          "headerNames": [
+            "Glucose (mg/dL)",
+            "Glucose (mmol/L)"
+          ]
+        },
+        {
+          "excelIndex": 30,
+          "controlType": "text",
+          "labels": [
+            "Thể cetonic (mg/dL)",
+            "Thể cetonic (mmol/L)"
+          ],
+          "headerNames": [
+            "Thể cetonic (mg/dL)",
+            "Thể cetonic (mmol/L)"
+          ]
+        },
+        {
+          "excelIndex": 31,
+          "controlType": "text",
+          "labels": [
+            "Bilirubin (mg/dL)",
+            "Bilirubin (µmol/L)"
+          ],
+          "headerNames": [
+            "Bilirubin (mg/dL)",
+            "Bilirubin (µmol/L)"
+          ]
+        },
+        {
+          "excelIndex": 32,
+          "controlType": "text",
+          "labels": [
+            "Urobilinogen (mg/dL)",
+            "Urobilinogen (µmol/L)"
+          ],
+          "headerNames": [
+            "Urobilinogen (mg/dL)",
+            "Urobilinogen (µmol/L)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "HoSoChung",
+      "name": "Hồ sơ sức khỏe (mẫu - chỉnh trong Cài đặt)",
+      "urlContains": "YOUR_FORM_PART_URL",
+      "description": null,
+      "fields": [
+        {
+          "excelIndex": 0,
+          "controlType": "text",
+          "labels": [
+            "Họ và tên",
+            "Ho va ten",
+            "hoten"
+          ],
+          "headerNames": [
+            "Họ và tên",
+            "Ho va ten",
+            "hoten"
+          ]
+        },
+        {
+          "excelIndex": 1,
+          "controlType": "date",
+          "labels": [
+            "Ngày sinh",
+            "Ngay sinh",
+            "ngaysinh"
+          ],
+          "headerNames": [
+            "Ngày sinh",
+            "Ngay sinh",
+            "ngaysinh"
+          ]
+        },
+        {
+          "excelIndex": 2,
+          "controlType": "auto",
+          "labels": [
+            "Giới tính",
+            "Phái",
+            "gioitinh"
+          ],
+          "headerNames": [
+            "Giới tính",
+            "Phái",
+            "gioitinh"
+          ]
+        },
+        {
+          "excelIndex": 3,
+          "controlType": "text",
+          "labels": [
+            "Số điện thoại",
+            "Dien thoai",
+            "sdt"
+          ],
+          "headerNames": [
+            "Số điện thoại",
+            "Dien thoai",
+            "sdt"
+          ]
+        },
+        {
+          "excelIndex": 4,
+          "controlType": "text",
+          "labels": [
+            "Địa chỉ",
+            "Dia chi"
+          ],
+          "headerNames": [
+            "Địa chỉ",
+            "Dia chi"
+          ]
+        },
+        {
+          "excelIndex": 5,
+          "controlType": "text",
+          "labels": [
+            "CCCD",
+            "Số căn cước",
+            "cccd"
+          ],
+          "headerNames": [
+            "CCCD",
+            "Số căn cước",
+            "cccd"
+          ]
+        },
+        {
+          "excelIndex": 6,
+          "controlType": "text",
+          "labels": [
+            "Mã BHYT",
+            "Số thẻ BHYT",
+            "mabhyt"
+          ],
+          "headerNames": [
+            "Mã BHYT",
+            "Số thẻ BHYT",
+            "mabhyt"
+          ]
+        }
+      ]
+    }
+  ]
+}

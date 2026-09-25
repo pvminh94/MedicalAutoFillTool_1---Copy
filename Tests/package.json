@@ -1,0 +1,16 @@
+{
+  "name": "maf-engine-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kiểm thử engine điền form (Shared/maf-engine.js) bằng jsdom",
+  "type": "module",
+  "scripts": {
+    "test": "node engine.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

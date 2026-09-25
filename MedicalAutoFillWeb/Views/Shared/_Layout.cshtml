@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@(ViewData["Title"] ?? "Medical Auto Fill") — Web</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true" />
+    @*
+        BẢN CŨ có `html, body { overflow: hidden }` + `iframe { 100% }` vì Index.cshtml
+        nhúng medinet trong iframe. Cách đó KHÔNG HOẠT ĐỘNG: medinet gửi
+        X-Frame-Options/CSP frame-ancestors nên iframe trắng, và người dùng mất luôn
+        thanh cuộn của trang cấu hình. Nay bỏ iframe, trang cuộn bình thường.
+    *@
+</head>
+<body>
+    @RenderBody()
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

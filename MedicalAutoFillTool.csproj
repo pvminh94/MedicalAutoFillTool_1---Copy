@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows7.0</TargetFramework>
+		<UseWindowsForms>true</UseWindowsForms>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+
+		<!-- Cấu hình đóng gói: xuất ra 1 file .exe duy nhất, tự cung cấp .NET, chạy trên mọi máy Win10/11 x64 -->
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>true</SelfContained>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+		<!-- Nén file giúp giảm dung lượng .EXE -->
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+
+		<!--
+		  CỰC KỲ QUAN TRỌNG — LỖI CÓ SẴN TỪ REPO GỐC:
+		  Project này nằm Ở THƯ MỤC GỐC của repo, mà glob mặc định của SDK là "**\*.cs"
+		  nên nó nuốt luôn source của các project con:
+		    MedicalAutoFillWeb\**\*.cs  (thiếu reference Microsoft.AspNetCore ->
+		                                 CS0246 'HttpGet'/'IActionResult' not found)
+		    MedinetBridge\Program.cs    (trùng [STAThread] Main -> CS0017)
+		    *\obj\**\*.AssemblyInfo.cs  (trùng AssemblyVersion/TargetFramework attribute)
+		  Nghĩa là `dotnet build` ở thư mục gốc KHÔNG BAO GIỜ thành công.
+		  (Trong Visual Studio có thể tưởng là ổn vì .sln build từng project riêng,
+		  nhưng project gốc vẫn tự glob như vậy.)
+		  Phải loại trừ thủ công các thư mục không thuộc project này.
+		-->
+		<DefaultItemExcludes>$(DefaultItemExcludes);MedicalAutoFillWeb\**;MedinetBridge\**;MedicalAutoFillApp\**;Shared\**;Tests\**;publish\**;docs\**;node_modules\**</DefaultItemExcludes>
+
+		<!-- Windows Forms không tương thích tốt với Full Trim, giữ false nhưng loại bỏ symbol -->
+		<PublishTrimmed>false</PublishTrimmed>
+		<DebugType>none</DebugType>
+		<DebugSymbols>false</DebugSymbols>
+		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+		<ApplicationIcon>m_logo_icon_167921.ico</ApplicationIcon>
+
+		<!-- Cho phép build trên Linux (CI) — không ảnh hưởng khi build trên Windows. -->
+		<EnableWindowsTargeting>true</EnableWindowsTargeting>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Content Include="m_logo_icon_167921.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2535.41" />
+	</ItemGroup>
+
+	<!-- ENGINE DÙNG CHUNG: một file JS duy nhất cho WinForms / MedinetBridge / Electron / Web.
+	     Nhúng thẳng vào .exe để bản publish 1 file không cần kèm file rời.
+	     LƯU Ý: project này nằm Ở THƯ MỤC GỐC repo nên đường dẫn là "Shared\..."
+	     (các project con MedinetBridge/ và MedicalAutoFillWeb/ mới dùng "..\Shared\...").
+	     Sai đường dẫn ở đây = lỗi CS1566 "Error reading resource" khi build. -->
+	<ItemGroup>
+		<EmbeddedResource Include="Shared\maf-engine.js" Link="Shared\maf-engine.js">
+			<LogicalName>maf-engine.js</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
+</Project>

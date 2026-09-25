@@ -1,0 +1,88 @@
+@{
+    ViewData["Title"] = "Dán dữ liệu xét nghiệm";
+}
+
+<div class="topbar">
+    <h1>Medical Auto Fill</h1>
+    <span class="sub">Web — dán từ Excel, tự điền vào medinet.org.vn</span>
+    <div class="spacer"></div>
+    <span id="bridgeBadge" class="badge idle">Bridge: đang kiểm tra…</span>
+    <a class="nav" href="/">Trang chủ</a>
+    <a class="nav" href="/Home/EditForm">Cấu hình form</a>
+    <a class="nav" href="/Home/Script" target="_blank">Script</a>
+</div>
+
+<div class="page">
+
+    <div class="card">
+        <div class="row">
+            <label for="formSelect"><strong>Form medinet:</strong></label>
+            <select id="formSelect" style="min-width:340px"></select>
+            <button type="button" id="btnReloadForms" class="secondary" title="Đọc lại cấu hình từ CSDL">↻ Tải lại</button>
+            <div class="spacer" style="flex:1"></div>
+            <span id="engineBadge" class="badge idle">Engine: …</span>
+        </div>
+        <div class="hint" id="formHint">Chọn form cần điền.</div>
+    </div>
+
+    <div class="card">
+        <h2>1. Dán dữ liệu từ Excel</h2>
+        <div class="hint">
+            Bấm vào ô đầu tiên trong bảng rồi nhấn <kbd>Ctrl</kbd>+<kbd>V</kbd>.
+            Dán trực tiếp từ Excel (kể cả vùng nhiều dòng/nhiều cột).
+            Muốn đổi dòng tiêu đề: bấm chọn dòng đó rồi nhấn nút <em>Đánh dấu dòng tiêu đề</em>
+            (hoặc nhấp đúp vào chữ cái tên cột).
+        </div>
+        <div id="grid"></div>
+        <div class="row" style="margin-top:8px">
+            <button type="button" id="btnHeader">⌄ Đánh dấu dòng tiêu đề</button>
+            <button type="button" id="btnClearHeader" class="secondary">Bỏ đánh dấu</button>
+            <button type="button" id="btnAddRows" class="secondary">+ Thêm 20 dòng</button>
+            <button type="button" id="btnClear" class="secondary">🗑 Xóa bảng</button>
+            <span class="grid-stats" id="gridStats">0 dòng · 0 cột</span>
+        </div>
+        <div id="matchInfo" class="grid-stats"></div>
+    </div>
+
+    <div class="card">
+        <h2>2. Gửi lên Medinet</h2>
+        <div class="hint">
+            Trang này KHÔNG tự điền vào medinet (trình duyệt không cho script chạy chéo trang).
+            Lệnh được gửi tới <span class="mono">MedinetBridge</span> đang chạy trên máy chủ — nơi giữ phiên đăng nhập medinet.
+            Dòng sẽ được điền = <strong>dòng bạn đang chọn</strong> trong bảng.
+        </div>
+        <div class="row">
+            <button type="button" id="btnFill">▶ Gửi dòng đang chọn lên Medinet</button>
+            <button type="button" id="btnDryRun" class="secondary">🔍 Chạy thử (không ghi)</button>
+            <button type="button" id="btnSelectNo" class="secondary">Chọn "Không" cho mọi câu hỏi</button>
+            <label style="margin-left:8px"><input type="checkbox" id="chkReload"> Tải lại trang medinet trước khi điền</label>
+            <span class="muted small" style="margin-left:8px">
+                Phím tắt: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> gửi · <kbd>Ctrl</kbd>+<kbd>B</kbd> chọn "Không" · <kbd>Ctrl</kbd>+<kbd>R</kbd> phân tích lại khớp cột
+            </span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. Kết quả</h2>
+        <div id="statusBox"><span class="badge idle">Chưa thực hiện</span></div>
+        <div id="reportBox" class="report"></div>
+    </div>
+
+    <div class="card">
+        <h2>Khi không điền được — kiểm tra theo thứ tự</h2>
+        <ol class="small muted" style="margin:6px 0 0 20px;line-height:1.8">
+            <li>Badge <strong>Bridge</strong> ở góc trên phải phải màu xanh. Nếu đỏ: trên <em>máy chủ</em> chưa chạy <span class="mono">MedinetBridge.exe</span>.</li>
+            <li>Trong cửa sổ Bridge, medinet phải đang mở <strong>đúng form</strong> cần điền và <strong>đã đăng nhập</strong>.</li>
+            <li>Bấm <strong>Chạy thử (không ghi)</strong> để xem engine khớp được bao nhiêu cột — nếu 0, xem mục <em>Cấu hình form</em> để bổ sung nhãn/tên cột Excel.</li>
+            <li>Dữ liệu phải có <strong>dòng tiêu đề</strong> (tên cột) để engine ghép đúng cột. Không có tiêu đề thì engine đoán theo thứ tự cột, rất dễ lệch.</li>
+        </ol>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Engine dùng chung: phục vụ từ chính app, KHÔNG dùng CDN.
+         Nếu file này không nạp được thì trang vẫn dán được (PasteGrid độc lập). -->
+    <script src="/Home/EngineJs" defer></script>
+    <script src="/js/paste-grid.js" defer></script>
+    <script src="/js/app.js" defer></script>
+}

@@ -1,0 +1,224 @@
+name: CI
+
+# Vì sao cần: repo này là WinForms + WebView2, thường chỉ build trên Windows, còn người
+# bảo trì có thể làm việc trên Linux/macOS. Workflow này biên dịch THẬT cả 3 project .NET
+# (nhờ <EnableWindowsTargeting>true</EnableWindowsTargeting>) và chạy bộ test engine,
+# nên lỗi cú pháp/sai API C# bị bắt ngay khi push thay vì lúc chạy ở bệnh viện.
+#
+# Hai chi tiết cố ý:
+#  - continue-on-error ở các bước build: MỘT lần push lộ ra hết lỗi của cả 3 project
+#    (nếu dừng ở project đầu thì phải push 3 vòng mới thấy hết lỗi). Bước cuối mới
+#    tổng hợp outcome và làm fail job.
+#  - bước "In toàn bộ lỗi biên dịch": annotation của GitHub bị giới hạn số lượng và
+#    hay lặp, nên phải tự trích `error CSxxxx` từ log và phát lại thành ::error::
+#    kèm file/dòng để đọc được qua API.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Test engine + biên dịch .NET
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Kiểm tra cấu trúc repo (C# / csproj / JS / JSON / view / engine API / self-test)
+        run: python3 Tests/check-all.py
+
+      - name: Cài jsdom cho test engine
+        run: npm ci
+        working-directory: Tests
+
+      - name: Chạy test engine điền form (48 case, jsdom)
+        run: npm test
+        working-directory: Tests
+
+      - name: Setup .NET 8 + 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Build bản Web (net9.0)
+        id: buildWeb
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet build MedicalAutoFillWeb/MedicalAutoFillWeb.csproj -c Release --nologo -v minimal 2>&1 | tee /tmp/build-web.log
+
+      - name: Build MedinetBridge (net9.0-windows)
+        id: buildBridge
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet build MedinetBridge/MedinetBridge.csproj -c Release --nologo -v minimal 2>&1 | tee /tmp/build-bridge.log
+
+      - name: Build bản WinForms (net8.0-windows)
+        id: buildWinForms
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet build MedicalAutoFillTool.csproj -c Release --nologo -v minimal 2>&1 | tee /tmp/build-winforms.log
+
+      - name: Publish thử bản WinForms ra 1 file .exe
+        id: publishWinForms
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -eo pipefail
+          dotnet publish MedicalAutoFillTool.csproj -c Release -r win-x64 --self-contained \
+            -p:PublishSingleFile=true -o /tmp/maf-publish --nologo -v minimal 2>&1 | tee /tmp/build-publish.log
+
+      - name: Kiểm tra engine có được nhúng không
+        id: checkExe
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -eo pipefail
+          {
+            # grep -a (coi file nhị phân như text) thay cho `strings` — ít phụ thuộc
+            # vào binutils của runner hơn, kết quả như nhau với chuỗi ASCII.
+            EXE="$(ls /tmp/maf-publish/*.exe 2>/dev/null | head -1 || true)"
+            if [ -z "$EXE" ]; then
+              echo "LOI: khong tim thay .exe nao trong /tmp/maf-publish — buoc publish that bai."
+              ls -la /tmp/maf-publish 2>/dev/null || echo "(khong co thu muc /tmp/maf-publish)"
+              exit 1
+            fi
+            ls -la "$EXE"
+            SIZE=$(stat -c %s "$EXE")
+            echo "Kich thuoc .exe: $SIZE byte"
+            if [ "$SIZE" -lt 20000000 ]; then
+              echo "LOI: .exe chi $SIZE byte — ban self-contained win-x64 phai lon hon nhieu."
+              exit 1
+            fi
+
+            # KHONG ket luan dua tren chuoi doc duoc tu .exe single-file: csproj bat
+            # EnableCompressionInSingleFile + IncludeAllContentForSelfExtract nen
+            # payload (gom ca assembly chua EmbeddedResource) bi nen Deflate trong
+            # bundle — khong thay chuoi KHONG co nghia la resource thieu.
+            # Phep thu dung: soi tren DLL cua ban build Release thuong (chua nen).
+            DLL="$(find bin -path '*Release*' -name 'MedicalAutoFillTool.dll' 2>/dev/null | head -1 || true)"
+            if [ -z "$DLL" ]; then
+              echo "LOI: khong tim thay MedicalAutoFillTool.dll ban Release de kiem tra resource."
+              exit 1
+            fi
+            echo "DLL dem soi: $DLL ($(stat -c %s "$DLL") byte)"
+            if ! grep -aq 'maf-engine.js' "$DLL"; then
+              echo "LOI: DLL khong chua EmbeddedResource ten 'maf-engine.js' — kiem tra LogicalName trong csproj."
+              exit 1
+            fi
+            echo "OK: DLL co EmbeddedResource 'maf-engine.js' (dung LogicalName ma C# dung de doc)."
+
+            # Nguon engine phai that (co ham resolveColumns) — chac rang cai duoc
+            # nhung khong phai file rong.
+            if [ ! -s Shared/maf-engine.js ]; then
+              echo "LOI: Shared/maf-engine.js khong ton tai hoac rong."
+              exit 1
+            fi
+            if ! grep -aq 'resolveColumns' Shared/maf-engine.js; then
+              echo "LOI: Shared/maf-engine.js khong chua resolveColumns — engine sai phien ban."
+              exit 1
+            fi
+            echo "OK: Shared/maf-engine.js ($(stat -c %s Shared/maf-engine.js) byte) co ham resolveColumns."
+
+            # Noi dung engine trong DLL: canh bao neu khong thay (resource co the
+            # duoc luu nen), khong lam fail — ten resource + nguon that la du bang chung.
+            if grep -aq 'resolveColumns' "$DLL"; then
+              echo "OK: noi dung engine (resolveColumns) thay duoc trong DLL, khong chi co ten."
+            else
+              echo "CANH BAO: khong thay noi dung engine trong DLL (co the do nen) — ten resource van dung."
+            fi
+            if grep -aq 'maf-engine.js' "$EXE"; then
+              echo "Ghi chu: chuoi 'maf-engine.js' cung thay duoc trong .exe."
+            else
+              echo "Ghi chu: khong thay chuoi trong .exe — binh thuong, payload bi nen."
+            fi
+            echo "✅ Engine da duoc nhung dung cach."
+          } 2>&1 | tee /tmp/checkexe.log
+
+      - name: In toàn bộ lỗi biên dịch (vượt giới hạn annotation của GitHub)
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          total=0
+          for f in /tmp/build-*.log; do
+            while IFS= read -r line; do
+              line="${line%$'\r'}"
+              [ -z "$line" ] && continue
+              total=$((total + 1))
+              file="$(printf '%s' "$line" | sed -E 's/^(.*)\(([0-9]+),([0-9]+)\): (error|warning) .*/\1/')"
+              ln="$(printf '%s' "$line" | sed -E 's/^(.*)\(([0-9]+),([0-9]+)\): (error|warning) .*/\2/')"
+              msg="$(printf '%s' "$line" | sed -E 's/^[^)]*\): //')"
+              if [ "$file" != "$line" ] && [ -n "$file" ]; then
+                echo "::error file=${file},line=${ln}::[$(basename "$f" .log)] ${msg}"
+              else
+                echo "::error::[$(basename "$f" .log)] ${line}"
+              fi
+            done < <(grep -E "error ([A-Z]+[0-9]+|:)" "$f" 2>/dev/null | sort -u | head -60)
+          done
+          echo "Tổng số dòng lỗi biên dịch đã trích: $total"
+
+      - name: Tổng hợp kết quả
+        if: always()
+        run: |
+          WEB="${{ steps.buildWeb.outcome }}"
+          BRIDGE="${{ steps.buildBridge.outcome }}"
+          WINFORMS="${{ steps.buildWinForms.outcome }}"
+          PUBLISH="${{ steps.publishWinForms.outcome }}"
+          EXE="${{ steps.checkExe.outcome }}"
+
+          {
+            echo "| Bước | Kết quả |"
+            echo "|---|---|"
+            echo "| Build Web (net9.0) | $WEB |"
+            echo "| Build MedinetBridge (net9.0-windows) | $BRIDGE |"
+            echo "| Build WinForms (net8.0-windows) | $WINFORMS |"
+            echo "| Publish 1 file .exe | $PUBLISH |"
+            echo "| Engine có được nhúng | $EXE |"
+          } >> $GITHUB_STEP_SUMMARY
+
+          # continue-on-error làm CONCLUSION của từng bước build luôn hiện "success",
+          # nên ở đây tự khai bước fail kèm trích log ra annotation. Lý do: log job
+          # không tải được từ môi trường bị chặn mạng (chỉ đọc được annotations qua
+          # API), nếu chỉ báo "có bước fail" thì không cách nào biết fail ở đâu.
+          fail=0
+          report() {
+            name="$1"; out="$2"; log="$3"
+            if [ "$out" != "success" ]; then
+              fail=1
+              echo "::error::BƯỚC THẤT BẠI: $name (outcome=$out)"
+              if [ -n "$log" ] && [ -f "$log" ]; then
+                echo "::error::===== 30 dòng cuối của $log ====="
+                tail -n 30 "$log" | sed 's/^/::error::| /'
+              else
+                echo "::error::(không có log $log để trích)"
+              fi
+            fi
+          }
+          report "Build Web (net9.0)" "$WEB" /tmp/build-web.log
+          report "Build MedinetBridge (net9.0-windows)" "$BRIDGE" /tmp/build-bridge.log
+          report "Build WinForms (net8.0-windows)" "$WINFORMS" /tmp/build-winforms.log
+          report "Publish 1 file .exe" "$PUBLISH" /tmp/build-publish.log
+          report "Engine có được nhúng" "$EXE" /tmp/checkexe.log
+
+          if [ "$fail" = "1" ]; then
+            echo "::error::Ít nhất một bước build/publish/kiểm-tra thất bại — chi tiết và trích log ở các ::error:: ngay phía trên."
+            exit 1
+          fi
+          echo "✅ Tất cả project .NET biên dịch + publish thành công, engine đã nhúng."

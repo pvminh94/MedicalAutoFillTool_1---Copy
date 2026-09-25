@@ -1,0 +1,42 @@
+@model MedicalAutoFillWeb.Models.ErrorViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Có lỗi";
+}
+
+<div class="page">
+    <div class="card">
+        <h2 style="color:#a41d1d">⚠ Đã xảy ra lỗi</h2>
+        <div class="hint">
+            Trang web gặp sự cố khi xử lý yêu cầu vừa rồi. Cấu hình và dữ liệu đã dán của bạn không bị ảnh hưởng.
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model?.Message))
+        {
+            <div class="notice err">@Model.Message</div>
+        }
+
+        <div class="row" style="margin-top:10px">
+            <a class="btn" href="/">← Về trang dán dữ liệu</a>
+            <a class="btn secondary" href="/Home/EditForm">Cấu hình form</a>
+            <button type="button" class="secondary" onclick="location.reload()">↻ Tải lại trang này</button>
+        </div>
+
+        @if (Model?.ShowRequestId == true)
+        {
+            <p class="small muted" style="margin-top:14px">
+                Mã yêu cầu: <span class="mono">@Model.RequestId</span><br>
+                Gửi mã này cùng file log trên máy chủ cho người quản trị để dò nguyên nhân.
+            </p>
+        }
+
+        <div class="notice" style="margin-top:14px">
+            <strong>Vài việc nên thử ngay:</strong>
+            <ol class="small" style="margin:6px 0 0 20px;line-height:1.8">
+                <li>Kiểm tra <span class="mono">MedinetBridge.exe</span> còn chạy trên máy chủ không (badge <em>Bridge</em> ở trang chủ).</li>
+                <li>Nếu vừa nâng cấp app web: xem log khởi động có dòng <em>no such column</em> không — nếu có, thư mục <span class="mono">Data/</span> đang không ghi được.</li>
+                <li>Khởi động lại app web rồi thử lại; lỗi tạm thời do medinet quá tải cũng hay gặp.</li>
+            </ol>
+        </div>
+    </div>
+</div>
