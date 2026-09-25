@@ -327,18 +327,7 @@ public partial class Form1 : Form
             core.SourceChanged += (_, _) => UpdateAddressBar();
             core.WebMessageReceived += Core_WebMessageReceived;
             core.PermissionRequested += Core_PermissionRequested;
-            // AcceleratorKeyPressed là event của CoreWebView2CONTROLLER chứ không phải
-            // CoreWebView2 (gắn nhầm -> CS1061). Phải lấy thông qua control WebView2.
-            var controller = _webView?.CoreWebView2Controller;
-            if (controller != null)
-            {
-                controller.AcceleratorKeyPressed += Core_AcceleratorKeyPressed;
-            }
-            else
-            {
-                AppLogger.Warn("Không gắn được AcceleratorKeyPressed: CoreWebView2Controller chưa sẵn sàng. " +
-                               "Phím tắt Ctrl+Shift+V trong trang có thể không hoạt động — dùng nút 📋 Dán.");
-            }
+            HookAcceleratorKeys(_webView!);
             core.NewWindowRequested += Core_NewWindowRequested;
             core.ProcessFailed += Core_ProcessFailed;
             core.DocumentTitleChanged += (_, _) => UpdateAddressBar();
@@ -687,6 +676,33 @@ public partial class Form1 : Form
     }
 
     // ------------------------------------------------------- Phím tắt trong trang
+    /// <summary>
+    /// Gắn phím tắt cấp trình duyệt (Ctrl+Shift+V ...) vào control WebView2.
+    ///
+    /// Event AcceleratorKeyPressed có ở BA chỗ khác nhau và rất dễ gắn nhầm:
+    ///   • CoreWebView2.AcceleratorKeyPressed        -> KHÔNG tồn tại (CS1061)
+    ///   • CoreWebView2Controller.AcceleratorKeyPressed -> tồn tại, nhưng control
+    ///     WebView2 của WinForms GIỮ PRIVATE controller (CS1061 khi truy cập)
+    ///   • WebView2.AcceleratorKeyPressed (control)  -> ĐÚNG, có từ SDK 1.0.705.50,
+    ///     chữ ký EventHandler&lt;CoreWebView2AcceleratorKeyPressedEventArgs&gt;
+    /// Gỡ rồi gắn lại để hàm này idempotent: InitializeWebViewAsync có thể chạy
+    /// nhiều lần (khôi phục sau khi render process chết) trên cùng một control.
+    /// </summary>
+    private void HookAcceleratorKeys(WebView2 wv)
+    {
+        if (wv == null) return;
+        try
+        {
+            wv.AcceleratorKeyPressed -= Core_AcceleratorKeyPressed;
+            wv.AcceleratorKeyPressed += Core_AcceleratorKeyPressed;
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("Không gắn được phím tắt trình duyệt: " + ex.Message +
+                           " — vẫn dùng được nút 📋 Dán và phím tắt khi focus ngoài trang.");
+        }
+    }
+
     private void Core_AcceleratorKeyPressed(object? sender, CoreWebView2AcceleratorKeyPressedEventArgs e)
     {
         if (e.KeyEventKind != CoreWebView2KeyEventKind.KeyDown) return;

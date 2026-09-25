@@ -344,6 +344,9 @@ API_TRAPS = [
      "Dùng _webView.CoreWebView2Controller.AcceleratorKeyPressed"),
     (r'CoreWebView2\??\s*\.\s*Dispose\s*\(',
      "CoreWebView2 KHÔNG implement IDisposable (CS1061). Dispose chính control WebView2 là đủ."),
+    (r'\.CoreWebView2Controller',
+     "Control WebView2 của WinForms GIỮ PRIVATE CoreWebView2Controller (CS1061). "
+     "Dùng event cấp control: _webView.AcceleratorKeyPressed += ..."),
     (r'new\s+ToolStripTextBox\s*\{[^}]*\bSpring\b',
      "ToolStripTextBox không có thuộc tính Spring trong object initializer (CS0117). "
      "Muốn ô chiếm hết chỗ trống thì tự tính Width khi thanh đổi kích thước."),
