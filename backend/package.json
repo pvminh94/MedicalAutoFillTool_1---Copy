@@ -53,7 +53,8 @@
     "pdfmake": "^0.2.20",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -68,7 +69,6 @@
     "drizzle-kit": "^0.31.11",
     "pdfjs-dist": "^4.10.38",
     "prettier": "^3.9.9",
-    "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }
 }

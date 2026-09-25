@@ -4,11 +4,17 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
+    "tsConfigPath": "tsconfig.build.json",
     "assets": [
-      { "include": "assets/**/*", "outDir": "dist/assets" },
-      { "include": "templates/**/*", "outDir": "dist/templates" }
+      {
+        "include": "../assets/**/*",
+        "outDir": "dist/assets"
+      },
+      {
+        "include": "../templates/**/*",
+        "outDir": "dist/templates"
+      }
     ],
-    "watchAssets": true,
-    "tsConfigPath": "tsconfig.json"
+    "watchAssets": true
   }
 }

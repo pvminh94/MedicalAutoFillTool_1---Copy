@@ -21,6 +21,9 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/scripts ./scripts
+# scripts/*.ts chạy bằng tsx lúc khởi động (migrate + seed + demo) nên cần src/
+# (seed.ts import ../src/config/env, ../src/db/schema, ../src/db/seed-data)
+COPY --from=build /app/src ./src
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 
