@@ -1,94 +1,315 @@
-@model FormProfile
 @{
     Layout = "_Layout";
-    ViewData["Title"] = "Sửa form: " + Model.Name;
+    ViewData["Title"] = "Cấu hình form";
+    var allForms = (List<MedicalAutoFillWeb.Models.FormProfile>?)ViewBag.AllForms ?? new();
+    var current = (MedicalAutoFillWeb.Models.FormProfile?)ViewBag.Form;
 }
-<style>
-    body { overflow: auto; padding: 20px; font-family: Arial, sans-serif; }
-    h2 { margin: 0 0 20px 0; color: #1a237e; }
-    .field-row { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
-    .field-row input[type=number] { width: 70px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
-    .field-row input[type=text] { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
-    .field-row select { width: 90px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
-    .field-row button { padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; }
-    .btn-remove { background: #f44336; color: #fff; }
-    .btn-add { background: #4caf50; color: #fff; }
-    .btn-save { background: #2196f3; color: #fff; padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    .form-info { background: #f5f5f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #ddd; }
-    .form-info label { font-weight: bold; display: block; margin-top: 8px; }
-    .form-info input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-top: 4px; }
-    .fields-box { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 15px; }
-    .hint { color: #999; font-size: 12px; margin: 10px 0; }
-</style>
+@*
+    BẢN CŨ CỦA TRANG NÀY KHÔNG BIÊN DỊCH ĐƯỢC:
+      - @model FormProfile nhưng controller không truyền Model  -> NullReferenceException
+      - dùng Model.UrlContains, thuộc tính KHÔNG TỒN TẠI trong FormProfile -> CS1061
+      - <option selected="@bool"> -> Razor in ra selected="True", HTML coi là selected
+        với MỌI giá trị => cả 2 option đều được chọn
+      - form method=post tới /Home/SaveForm nhưng action đó nhận [FromBody] JSON
+    Trang này được viết lại: đọc/ghi JSON, không phụ thuộc model binding.
+*@
 
-<h2>✏ Sửa form: @Model.Name</h2>
-<a href="/Home/Forms" style="color:#2196f3;text-decoration:none;">← Quay lại</a>
+<div class="topbar">
+    <h1>Cấu hình form</h1>
+    <span class="sub">Ánh xạ cột Excel → trường trên medinet</span>
+    <div class="spacer"></div>
+    <a class="nav" href="/">← Trang dán dữ liệu</a>
+    <a class="nav" href="/Home/Script?id=@(current?.Id)" target="_blank">Xem script</a>
+</div>
 
-<form method="post" action="/Home/SaveForm">
-    <input type="hidden" name="Id" value="@Model.Id" />
-    
-    <div class="form-info">
-        <label>Tên form:</label>
-        <input type="text" name="Name" value="@Model.Name" required />
-        
-        <label>Chuỗi nhận diện URL:</label>
-        <input type="text" name="UrlContains" value="@Model.UrlContains" required placeholder="VD: KSKDK_Phieu_CanLamSang" />
-    </div>
-    
-    <div class="fields-box">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <strong>Ánh xạ cột Excel → Label trên web</strong>
-            <button type="button" class="btn-add" onclick="addField()">+ Thêm trường</button>
-        </div>
-        
-        <div id="fieldsContainer">
-            @if (Model.Fields != null)
-            {
-                var idx = 0;
-                foreach (var f in Model.Fields)
+<div class="page">
+    <div class="card">
+        <div class="row">
+            <label for="formPicker"><strong>Form:</strong></label>
+            <select id="formPicker" style="min-width:340px">
+                @foreach (var f in allForms)
                 {
-                    <div class="field-row" data-index="@idx">
-                        <input type="number" name="Fields[@idx].ExcelIndex" value="@f.ExcelIndex" min="0" />
-                        <input type="text" name="Fields[@idx].Labels" value="@(string.Join(";", f.Labels))" placeholder="Label (cách nhau bằng ;)" />
-                        <select name="Fields[@idx].ControlType">
-                            <option value="text" selected="@(f.ControlType == "text")">text</option>
-                            <option value="textarea" selected="@(f.ControlType == "textarea")">textarea</option>
-                        </select>
-                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">✖</button>
-                    </div>
-                    idx++;
+                    var sel = current != null && current.Id == f.Id ? " selected" : "";
+                    <option value="@f.Id"@sel>@(string.IsNullOrEmpty(f.DisplayName) ? f.Name : f.DisplayName) — @f.Fields.Count trường</option>
                 }
-            }
-        </div>
-        
-        <div class="hint">
-            💡 Cột Excel: số thứ tự cột (bắt đầu từ 0). Label: tên hiển thị trên web, cách nhau bằng dấu ; nếu có nhiều tên.
-        </div>
-    </div>
-    
-    <div style="margin-top: 20px;">
-        <button type="submit" class="btn-save">💾 Lưu form</button>
-        <a href="/Home/Forms" style="margin-left:10px;color:#666;">Hủy</a>
-    </div>
-</form>
-
-<script>
-    var fieldIndex = @(Model.Fields?.Count ?? 0);
-    
-    function addField() {
-        var container = document.getElementById('fieldsContainer');
-        var div = document.createElement('div');
-        div.className = 'field-row';
-        div.innerHTML = `
-            <input type="number" name="Fields[${fieldIndex}].ExcelIndex" value="${fieldIndex}" min="0" />
-            <input type="text" name="Fields[${fieldIndex}].Labels" placeholder="Label (cách nhau bằng ;)" />
-            <select name="Fields[${fieldIndex}].ControlType">
-                <option value="text">text</option>
-                <option value="textarea">textarea</option>
+                <option value="new">+ Tạo form mới…</option>
             </select>
-            <button type="button" class="btn-remove" onclick="this.parentElement.remove()">✖</button>
-        `;
-        container.appendChild(div);
-        fieldIndex++;
-    }
-</script>
+            <button type="button" class="secondary" id="btnDuplicate">⧉ Nhân bản form này</button>
+            <span class="muted small">Đổi form sẽ tải lại trang.</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Thông tin form</h2>
+        <div style="display:grid;grid-template-columns:180px 1fr;gap:8px 12px;align-items:center;max-width:900px">
+            <label>Tên nội bộ (Name)</label>
+            <input type="text" id="f_name" placeholder="vd: can_lam_sang_kskdk">
+
+            <label>Tên hiển thị</label>
+            <input type="text" id="f_display" placeholder="vd: Phiếu Xét Nghiệm (KSKDK)">
+
+            <label>URL form</label>
+            <input type="text" id="f_url" placeholder="https://quanlyskcd.medinet.org.vn/...">
+
+            <label>Chuỗi nhận diện trong URL</label>
+            <input type="text" id="f_regex" placeholder="vd: KSKDK_Phieu_CanLamSang">
+
+            <label>Mô tả</label>
+            <input type="text" id="f_desc">
+
+            <label>Nhãn câu hỏi Có/Không</label>
+            <input type="text" id="f_noq" placeholder="cách nhau bằng dấu ;">
+        </div>
+        <div class="hint">
+            <strong>Chuỗi nhận diện trong URL</strong> là cách engine biết đang ở form nào — chỉ cần một đoạn
+            đặc trưng (không cần đúng cả URL). Nếu để trống, engine so URL tuyệt đối và rất dễ không khớp
+            khi medinet đổi phiên bản.
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Ánh xạ trường</h2>
+        <div class="hint">
+            <strong>Tên cột Excel</strong> là quan trọng nhất: engine ghép cột theo tiêu đề của dữ liệu bạn dán,
+            nên file Excel đổi thứ tự cột vẫn điền đúng. Có thể liệt kê nhiều tên, cách nhau bằng dấu <span class="mono">;</span>
+            (vd <span class="mono">Số lượng HC; SLHC; RBC</span>). Nếu bỏ trống, engine tự suy ra từ nhãn.
+        </div>
+
+        <div class="row" style="margin-bottom:8px">
+            <button type="button" id="btnAdd">+ Thêm trường</button>
+            <button type="button" class="secondary" id="btnRenumber">Đánh số lại cột Excel</button>
+            <span class="muted small" id="fieldCount"></span>
+            <div style="flex:1"></div>
+            <button type="button" id="btnSave">💾 Lưu cấu hình</button>
+        </div>
+
+        <div style="overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:4px">
+            <table class="list" id="fieldsTable">
+                <thead>
+                    <tr>
+                        <th style="width:34px">#</th>
+                        <th style="width:70px">Cột Excel</th>
+                        <th style="width:24%">Nhãn trên medinet (;)</th>
+                        <th style="width:26%">Tên cột trong Excel (;)</th>
+                        <th style="width:18%">Selector CSS (tuỳ chọn)</th>
+                        <th style="width:100px">Loại</th>
+                        <th style="width:60px">Bắt buộc</th>
+                        <th style="width:60px"></th>
+                    </tr>
+                </thead>
+                <tbody id="fieldsBody"></tbody>
+            </table>
+        </div>
+        <div id="saveStatus" class="hint"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            'use strict';
+            var initial = @Html.Raw(ViewBag.FormJson as string ?? "null");
+            var state = initial || blankForm();
+
+            function blankForm() {
+                return {
+                    id: 0, name: '', displayName: '', url: '', urlRegex: '',
+                    description: '', noQuestionLabels: '', fields: []
+                };
+            }
+
+            var $ = function (id) { return document.getElementById(id); };
+
+            function esc(s) {
+                return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            function joinList(a) { return (a && a.length) ? a.join('; ') : ''; }
+
+            function renderForm() {
+                $('f_name').value = state.name || '';
+                $('f_display').value = state.displayName || '';
+                $('f_url').value = state.url || '';
+                $('f_regex').value = state.urlRegex || '';
+                $('f_desc').value = state.description || '';
+                $('f_noq').value = state.noQuestionLabels || '';
+                renderFields();
+            }
+
+            function renderFields() {
+                var body = $('fieldsBody');
+                var html = [];
+                (state.fields || []).forEach(function (f, i) {
+                    var ct = f.controlType || 'auto';
+                    html.push('<tr data-i="' + i + '">' +
+                        '<td class="muted right">' + (i + 1) + '</td>' +
+                        '<td><input type="number" data-k="excelIndex" value="' + esc(f.excelIndex) + '" min="0" style="width:60px"></td>' +
+                        '<td><input type="text" data-k="labelsText" value="' + esc(joinList(f.labels)) + '" placeholder="Số lượng HC" style="width:100%"></td>' +
+                        '<td><input type="text" data-k="headerText" value="' + esc(joinList(f.headerNames)) + '" placeholder="Số lượng HC; SLHC; RBC" style="width:100%"></td>' +
+                        '<td><input type="text" data-k="selector" value="' + esc(f.selector || '') + '" placeholder="(tự nhận diện)" style="width:100%" class="mono"></td>' +
+                        '<td><select data-k="controlType" style="width:100%">' +
+                        ['auto', 'text', 'textarea', 'number', 'date', 'select', 'checkbox', 'radio'].map(function (t) {
+                            return '<option value="' + t + '"' + (t === ct ? ' selected' : '') + '>' + t + '</option>';
+                        }).join('') + '</select></td>' +
+                        '<td class="right"><input type="checkbox" data-k="required"' + (f.required ? ' checked' : '') + '></td>' +
+                        '<td class="right">' +
+                        '<button type="button" class="secondary" data-act="up" title="Lên">↑</button> ' +
+                        '<button type="button" class="secondary" data-act="down" title="Xuống">↓</button> ' +
+                        '<button type="button" class="danger" data-act="del" title="Xóa">✖</button>' +
+                        '</td></tr>');
+                });
+                body.innerHTML = html.join('') ||
+                    '<tr><td colspan="8" class="muted" style="padding:14px">Chưa có trường nào — bấm "+ Thêm trường".</td></tr>';
+                $('fieldCount').textContent = (state.fields || []).length + ' trường';
+            }
+
+            // Đồng bộ ô nhập -> state
+            $('fieldsBody').addEventListener('input', function (e) {
+                var tr = e.target.closest ? e.target.closest('tr[data-i]') : null;
+                if (!tr) return;
+                var i = parseInt(tr.getAttribute('data-i'), 10);
+                var k = e.target.getAttribute('data-k');
+                var f = state.fields[i];
+                if (!f || !k) return;
+                if (k === 'excelIndex') f.excelIndex = parseInt(e.target.value, 10) || 0;
+                else if (k === 'labelsText') f.labels = splitList(e.target.value);
+                else if (k === 'headerText') f.headerNames = splitList(e.target.value);
+                else f[k] = e.target.value;
+            });
+            $('fieldsBody').addEventListener('change', function (e) {
+                var tr = e.target.closest ? e.target.closest('tr[data-i]') : null;
+                if (!tr) return;
+                var i = parseInt(tr.getAttribute('data-i'), 10);
+                var k = e.target.getAttribute('data-k');
+                var f = state.fields[i];
+                if (!f || !k) return;
+                if (k === 'required') f.required = !!e.target.checked;
+                else if (k === 'controlType') f.controlType = e.target.value;
+            });
+
+            function splitList(s) {
+                return String(s || '').split(';').map(function (x) { return x.trim(); })
+                    .filter(function (x) { return x.length > 0; });
+            }
+
+            // Nút trên từng dòng
+            $('fieldsBody').addEventListener('click', function (e) {
+                var btn = e.target.closest ? e.target.closest('button[data-act]') : null;
+                if (!btn) return;
+                var tr = btn.closest('tr[data-i]');
+                var i = parseInt(tr.getAttribute('data-i'), 10);
+                var act = btn.getAttribute('data-act');
+                var arr = state.fields;
+                if (act === 'del') { if (!confirm('Xóa trường này?')) return; arr.splice(i, 1); }
+                else if (act === 'up' && i > 0) { var t = arr[i - 1]; arr[i - 1] = arr[i]; arr[i] = t; }
+                else if (act === 'down' && i < arr.length - 1) { var t2 = arr[i + 1]; arr[i + 1] = arr[i]; arr[i] = t2; }
+                renderFields();
+            });
+
+            $('btnAdd').addEventListener('click', function () {
+                state.fields = state.fields || [];
+                var maxIdx = -1;
+                state.fields.forEach(function (f) { if (f.excelIndex > maxIdx) maxIdx = f.excelIndex; });
+                state.fields.push({
+                    excelIndex: maxIdx + 1, labels: [], headerNames: [],
+                    selector: '', controlType: 'auto', required: false, transform: null
+                });
+                renderFields();
+            });
+
+            $('btnRenumber').addEventListener('click', function () {
+                (state.fields || []).forEach(function (f, i) { f.excelIndex = i; });
+                renderFields();
+            });
+
+            $('btnDuplicate').addEventListener('click', function () {
+                if (!state.id) { alert('Hãy lưu form hiện tại trước khi nhân bản.'); return; }
+                var copy = JSON.parse(JSON.stringify(state));
+                copy.id = 0;
+                copy.name = (copy.name || 'form') + '_copy';
+                copy.displayName = (copy.displayName || copy.name) + ' (bản sao)';
+                state = copy;
+                renderForm();
+                $('saveStatus').textContent = 'Đang tạo bản sao — bấm "Lưu cấu hình" để ghi vào CSDL.';
+            });
+
+            $('formPicker').addEventListener('change', function () {
+                var v = this.value;
+                if (v === 'new') location.href = '/Home/EditForm?new=1';
+                else location.href = '/Home/EditForm?id=' + encodeURIComponent(v);
+            });
+
+            ['f_name', 'f_display', 'f_url', 'f_regex', 'f_desc', 'f_noq'].forEach(function (id) {
+                $(id).addEventListener('input', function () {
+                    var map = {
+                        f_name: 'name', f_display: 'displayName', f_url: 'url',
+                        f_regex: 'urlRegex', f_desc: 'description', f_noq: 'noQuestionLabels'
+                    };
+                    state[map[id]] = this.value;
+                });
+            });
+
+            $('btnSave').addEventListener('click', function () {
+                var status = $('saveStatus');
+                if (!state.name || !state.name.trim()) {
+                    status.innerHTML = '<span style="color:#dc2626">Phải có "Tên nội bộ".</span>';
+                    return;
+                }
+                if (!state.fields || !state.fields.length) {
+                    status.innerHTML = '<span style="color:#d97706">Form chưa có trường nào — vẫn lưu được nhưng sẽ không điền gì.</span>';
+                }
+
+                // Chuyển labels/headerNames (mảng) về chuỗi ";" đúng như DTO phía server.
+                var payload = {
+                    id: state.id || 0,
+                    name: state.name,
+                    displayName: state.displayName,
+                    url: state.url,
+                    urlRegex: state.urlRegex,
+                    description: state.description,
+                    noQuestionLabels: state.noQuestionLabels,
+                    fields: (state.fields || []).map(function (f) {
+                        return {
+                            excelIndex: f.excelIndex,
+                            labels: (f.labels || []).join(';'),
+                            headerNames: (f.headerNames || []).join(';'),
+                            selector: f.selector || null,
+                            controlType: f.controlType || 'auto',
+                            required: !!f.required,
+                            transform: f.transform || null
+                        };
+                    })
+                };
+
+                this.disabled = true;
+                status.textContent = 'Đang lưu…';
+                fetch('/Home/SaveForm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                    .then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); })
+                    .then(function (res) {
+                        if (res.status >= 400) {
+                            status.innerHTML = '<span style="color:#dc2626">Không lưu được: ' +
+                                esc((res.json && res.json.message) || ('HTTP ' + res.status)) + '</span>';
+                            return;
+                        }
+                        status.innerHTML = '<span style="color:#16a34a">✔ ' + esc(res.json.message || 'Đã lưu.') + '</span>';
+                        if (!state.id && res.json.id) {
+                            state.id = res.json.id;
+                            setTimeout(function () { location.href = '/Home/EditForm?id=' + res.json.id; }, 700);
+                        }
+                    })
+                    .catch(function (e) {
+                        status.innerHTML = '<span style="color:#dc2626">Không gọi được máy chủ: ' + esc(e.message || e) + '</span>';
+                    })
+                    .finally(function () { $('btnSave').disabled = false; });
+            });
+
+            if (location.search.indexOf('new=1') >= 0) state = blankForm();
+            renderForm();
+        })();
+    </script>
+}

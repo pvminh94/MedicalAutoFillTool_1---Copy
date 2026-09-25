@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
@@ -22,6 +22,9 @@
 		<DebugSymbols>false</DebugSymbols>
 		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
 		<ApplicationIcon>m_logo_icon_167921.ico</ApplicationIcon>
+
+		<!-- Cho phép build trên Linux (CI) — không ảnh hưởng khi build trên Windows. -->
+		<EnableWindowsTargeting>true</EnableWindowsTargeting>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -31,4 +34,16 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2535.41" />
 	</ItemGroup>
+
+	<!-- ENGINE DÙNG CHUNG: một file JS duy nhất cho WinForms / MedinetBridge / Electron / Web.
+	     Nhúng thẳng vào .exe để bản publish 1 file không cần kèm file rời.
+	     LƯU Ý: project này nằm Ở THƯ MỤC GỐC repo nên đường dẫn là "Shared\..."
+	     (các project con MedinetBridge/ và MedicalAutoFillWeb/ mới dùng "..\Shared\...").
+	     Sai đường dẫn ở đây = lỗi CS1566 "Error reading resource" khi build. -->
+	<ItemGroup>
+		<EmbeddedResource Include="Shared\maf-engine.js" Link="Shared\maf-engine.js">
+			<LogicalName>maf-engine.js</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
 </Project>

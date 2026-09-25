@@ -1,40 +1,46 @@
-## .NET Core
+## .NET
 bin/
 obj/
+publish/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
 .vs/
-
-## Visual Studio
 *.userprefs
 *.[Cc]ache
 *.bak
-*.log
 *.tmp
 
-## NuGet Packages
+## Log (app tự ghi để chẩn đoán — không đưa vào repo)
+*.log
+logs/
+
+## NuGet
 **/[Pp]ackages/*
 !**/[Pp]ackages/build/
 
-## Web
+## Node (test engine + bản Electron)
 node_modules/
+MedicalAutoFillApp/dist/
+npm-debug.log*
+
+## Web
 wwwroot/lib/
 *.js.map
 *.css.map
 
-## Database
+## CSDL cấu hình của bản Web (mỗi máy tự seed)
 *.db
 *.db-shm
 *.db-wal
 
-## IIS
-publish/
-*.deploy
-
-## Environment
+## Cấu hình cục bộ / file xuất ra của người dùng
 appsettings.Production.json
 appsettings.Development.json.local
-*.userdist\ 
-node_modules\ 
+forms.json
+maf-config.json
+
+## Kết quả build
+dist/
+*.deploy

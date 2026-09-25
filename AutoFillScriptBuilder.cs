@@ -1,134 +1,125 @@
-﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MedicalAutoFillTool;
 
+/// <summary>Dữ liệu gửi cho engine JavaScript để điền một hoặc nhiều dòng.</summary>
+public sealed class FillPayload
+{
+    /// <summary>Toàn bộ các dòng đã dán (mảng 2 chiều, đã chuẩn hoá).</summary>
+    public List<string[]> Rows { get; set; } = new();
+
+    /// <summary>Dòng tiêu đề (nếu phát hiện được) — engine dùng để khớp cột theo TÊN.</summary>
+    public string[]? HeaderRow { get; set; }
+
+    /// <summary>Chỉ số dòng cần điền (tuyệt đối trong <see cref="Rows"/>).</summary>
+    public int? RowIndex { get; set; }
+
+    /// <summary>Nhiều dòng cần điền liên tiếp (hàng đợi).</summary>
+    public List<int>? RowIndexes { get; set; }
+
+    /// <summary>Mapping dùng cho lần điền này. C# gửi rõ để engine KHÔNG phải tự đoán theo URL.</summary>
+    public List<FieldMapping>? Fields { get; set; }
+
+    /// <summary>Tên form (chỉ để hiển thị trong báo cáo).</summary>
+    public string? FormId { get; set; }
+
+    /// <summary>true = chỉ kiểm tra mapping, KHÔNG ghi dữ liệu.</summary>
+    public bool DryRun { get; set; }
+
+    /// <summary>Thời gian chờ form render (ms), ghi đè cấu hình nếu cần.</summary>
+    public int? ReadyTimeoutMs { get; set; }
+}
+
 /// <summary>
-/// Sinh ra mã JavaScript chung, hoàn toàn điều khiển bởi AppConfig.
-/// Khi web đổi label / thêm trường, chỉ cần sửa cấu hình trong giao diện Cài đặt - không cần sửa code.
+/// Sinh các đoạn JavaScript gửi sang WebView2.
+///
+/// THAY ĐỔI QUAN TRỌNG: file này KHÔNG còn chứa logic điền form nữa — nó chỉ bọc
+/// Shared/maf-engine.js (một nguồn duy nhất, đã có 48 test jsdom). Trước đây logic
+/// bị chép tay vào 3 nơi (WinForms, MedinetBridge, Electron) và lệch nhau.
+///
+/// Lưu ý về async: ExecuteScriptAsync KHÔNG chờ Promise. Vì vậy các lệnh điền
+/// không lấy kết quả qua giá trị trả về mà qua window.MAF -> chrome.webview.postMessage
+/// (Form1 bắt ở sự kiện WebMessageReceived).
 /// </summary>
 public static class AutoFillScriptBuilder
 {
-    public static string Build(AppConfig config)
+    /// <summary>Engine + nạp cấu hình. Dùng cho AddScriptToExecuteOnDocumentCreatedAsync.</summary>
+    public static string Build(AppConfig config) => EngineScript.BuildBootstrap(config);
+
+    /// <summary>Chỉ nạp lại cấu hình cho trang đang mở (sau khi bấm Lưu trong Cài đặt).</summary>
+    public static string BuildConfigure(AppConfig config)
     {
-        var configJson = JsonSerializer.Serialize(config, AppJson.Options);
-        return Template.Replace("__CONFIG_JSON__", configJson);
+        return "try{ if(window.MAF){ window.MAF.configure(" + AppJson.SerializeForScript(config) + "); } }catch(e){ console.error('[MAF] configure lỗi', e); }";
     }
 
-    private const string Template = @"
-(function () {
-  // Đã nạp rồi trong trang này thì chỉ cập nhật cấu hình (tránh trùng listener sau khi lưu Cài đặt).
-  if (window.__MAF_api) { window.__MAF_api.setConfig(__CONFIG_JSON__); return; }
-
-  var CONFIG = __CONFIG_JSON__;
-
-  function setConfig(newConfig) { CONFIG = newConfig; console.log('[MAF] Đã cập nhật cấu hình.'); }
-
-  // ---- Nhận diện form đang mở theo URL ----
-  function activeForm() {
-    var url = location.href || '';
-    var found = null;
-    (CONFIG.forms || []).forEach(function (f) {
-      if (f.urlContains && url.indexOf(f.urlContains) >= 0) found = f;
-    });
-    return found;
-  }
-
-  // ---- Tìm ô nhập theo nhãn hiển thị (label) ----
-  function findInputByVisualLabel(labelConfig) {
-    var keys = (Array.isArray(labelConfig) ? labelConfig : [labelConfig]).map(function (l) { return String(l).toLowerCase().trim(); });
-    var els = Array.prototype.slice.call(document.querySelectorAll('label, span, div, td, th, p, b, strong'));
-    var matches = els.filter(function (el) {
-      var t = el.innerText ? el.innerText.toLowerCase().trim() : '';
-      return keys.indexOf(t) >= 0;
-    });
-    if (matches.length === 0) return null;
-
-    var targetLabel = matches[matches.length - 1];
-    var container = targetLabel.closest('.dx-field, .form-group, .row, div') || targetLabel.parentElement;
-    var input = container ? container.querySelector('input:not([type=""hidden""]), textarea') : null;
-
-    if (!input) {
-      var lr = targetLabel.getBoundingClientRect();
-      var inputs = Array.prototype.slice.call(document.querySelectorAll('input:not([type=""hidden""]), textarea'));
-      var best = null, min = Infinity;
-      inputs.forEach(function (inp) {
-        var ir = inp.getBoundingClientRect();
-        var below = ir.top >= lr.bottom - 10 && ir.top <= (lr.bottom + 60) && ir.left >= (lr.left - 20) && ir.left <= (lr.left + 80);
-        if (below) { var d = Math.abs(ir.top - lr.bottom); if (d < min) { min = d; best = inp; } }
-      });
-      input = best;
+    /// <summary>Lệnh điền dữ liệu. Kết quả về qua WebMessageReceived.</summary>
+    public static string BuildFill(FillPayload payload)
+    {
+        return InvokeAsync("fill", payload);
     }
-    return input;
-  }
 
-  function setValue(input, value) {
-    input.focus();
-    input.value = value;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    input.dispatchEvent(new Event('blur', { bubbles: true }));
-  }
-
-  // ---- Điền dữ liệu từ clipboard (Excel) ----
-  function fillFromClipboard() {
-    var form = activeForm();
-    if (!form) { console.warn('[MAF] Không nhận diện form cho URL này. Vào Cài đặt thêm cấu hình.'); return; }
-    var sep = CONFIG.pasteMode === 'comma' ? ',' : '\t';
-    navigator.clipboard.readText().then(function (text) {
-      if (!text) return;
-      if (text.indexOf(sep) < 0 && text.indexOf('\n') < 0) return;
-      var rows = text.split(/\r?\n/).map(function (r) { return r.split(sep); });
-      var data = rows[0];
-      var ok = 0, miss = 0;
-      (form.fields || []).forEach(function (f) {
-        var raw = data[f.excelIndex];
-        if (raw === undefined || raw === null || String(raw).trim() === '') return;
-        var inp = findInputByVisualLabel(f.labels);
-        if (inp) { setValue(inp, String(raw).trim()); ok++; } else miss++;
-      });
-      console.log('[MAF] Đã điền ' + ok + ' trường' + (miss ? ' (bỏ qua ' + miss + ' chưa tìm được)' : '') + '.');
-    }).catch(function (e) { console.error('[MAF] Lỗi đọc clipboard:', e); });
-  }
-
-  // ---- Tự động chọn radio tương ứng Khong - Hau nhu khong ----
-  function selectAllNo() {
-    var n = 0;
-    var keywords = (CONFIG.selectNoKeywords || []).map(function (k) { return String(k).toLowerCase().trim(); });
-    Array.prototype.slice.call(document.querySelectorAll('.dx-item-content, .dx-list-item-content, span, label')).forEach(function (el) {
-      if (!el.innerText) return;
-      var t = el.innerText.trim().toLowerCase();
-      if (keywords.indexOf(t) >= 0) {
-        var container = el.closest('.dx-radio-button, .dx-item, td, tr') || el.parentElement;
-        var radio = container ? container.querySelector('input[type=""radio""]') : null;
-        if (radio) {
-          if (!radio.checked) {
-            radio.click(); radio.checked = true;
-            radio.dispatchEvent(new Event('change', { bubbles: true }));
-            radio.dispatchEvent(new Event('input', { bubbles: true }));
-            n++;
-          }
-        } else {
-          var clickable = (container ? container.querySelector('.dx-radio, .dx-radio-value-container') : null) || el;
-          var isChecked = container && (container.getAttribute('aria-checked') === 'true' || container.classList.contains('dx-state-checked'));
-          if (!isChecked) { clickable.click(); n++; }
-        }
-      }
-    });
-    console.log('[MAF] Đã chọn ""Không"" cho ' + n + ' mục.');
-  }
-
-  window.addEventListener('paste', function (e) {
-    setTimeout(fillFromClipboard, 0);
-  });
-
-  window.addEventListener('keydown', function (e) {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-      e.preventDefault(); selectAllNo();
+    /// <summary>Kiểm tra mapping mà không ghi (nút "Kiểm tra" / F10).</summary>
+    public static string BuildDryRun(FillPayload payload)
+    {
+        payload.DryRun = true;
+        return InvokeAsync("fill", payload);
     }
-  });
 
-  window.__MAF_api = { setConfig: setConfig, selectAllNo: selectAllNo, fillFromClipboard: fillFromClipboard };
-  console.log('[MAF] Tiện ích tự động đã sẵn sàng.');
-})();
-";
+    /// <summary>Chọn "Không" hàng loạt (Ctrl+B).</summary>
+    public static string BuildSelectNo(IEnumerable<string>? keywords = null)
+    {
+        var arg = keywords == null ? "{}" : "{\"keywords\":" + JsonSerializer.Serialize(keywords.ToArray()) + "}";
+        return "try{ if(window.MAF){ window.MAF.selectAllNo(" + arg + "); } else { console.warn('[MAF] engine chưa nạp'); } }catch(e){ console.error(e); }";
+    }
+
+    /// <summary>Quét trang: trả về JSON (đồng bộ) gồm nhãn + ô nhập kề nó, kèm selector gợi ý.</summary>
+    public static string BuildScan(string? filter = null)
+    {
+        var arg = string.IsNullOrEmpty(filter) ? "{}" : "{\"filter\":" + JsonSerializer.Serialize(filter) + "}";
+        return "(function(){ try { return window.MAF ? JSON.stringify(window.MAF.scan(" + arg + ")) : '{\"error\":\"engine chua nap\"}'; } catch(e) { return '{\"error\":\"' + String(e).replace(/\"/g, '') + '\"}'; } })()";
+    }
+
+    /// <summary>Trạng thái engine (đồng bộ): form nhận diện được, số trường, phiên bản.</summary>
+    public static string BuildState()
+    {
+        return "(function(){ try { return window.MAF ? JSON.stringify(window.MAF.state()) : '{\"error\":\"engine chua nap\"}'; } catch(e) { return '{\"error\":\"scan fail\"}'; } })()";
+    }
+
+    /// <summary>Đếm nhanh số trường tìm thấy ô nhập (đồng bộ) — dùng cho nút Kiểm tra.</summary>
+    public static string BuildProbe(List<FieldMapping> fields)
+    {
+        var json = AppJson.SerializeForScript(fields);
+        return "(function(){ try { return window.MAF ? JSON.stringify(window.MAF.probe(" + json + ")) : '{\"error\":\"engine chua nap\"}'; } catch(e) { return '{\"error\":\"probe fail\"}'; } })()";
+    }
+
+    /// <summary>Tô vàng một số nhãn trên trang để người dùng thấy mapping khớp chỗ nào.</summary>
+    public static string BuildHighlight(IEnumerable<string> labels)
+    {
+        return "try{ if(window.MAF){ window.MAF.highlightLabels(" + JsonSerializer.Serialize(labels.ToArray()) + "); } }catch(e){ console.error(e); }";
+    }
+
+    /// <summary>Buộc engine quét lại DOM (sau khi trang tự vẽ lại form).</summary>
+    public static string BuildInvalidate()
+    {
+        return "try{ if(window.MAF){ window.MAF.invalidate(); } }catch(e){}";
+    }
+
+    /// <summary>
+    /// Bọc một lời gọi hàm async của engine. Cố ý KHÔNG return giá trị:
+    /// ExecuteScriptAsync không chờ Promise, kết quả về qua postMessage.
+    /// </summary>
+    private static string InvokeAsync(string fn, object payload)
+    {
+        var json = AppJson.SerializeForScript(payload);
+        return "(function(){ try {" +
+               "  if(!window.MAF){ console.warn('[MAF] engine chưa được nạp vào trang này');" +
+               "    if(window.chrome&&chrome.webview){chrome.webview.postMessage(JSON.stringify({type:'maf:result',payload:{error:'engine-not-loaded'," +
+               "message:'Engine chưa nạp vào trang. Hãy tải lại trang (F5).'}}));} return; }" +
+               "  window.MAF." + fn + "(" + json + ").catch(function(err){" +
+               "    console.error('[MAF] " + fn + " lỗi', err);" +
+               "    if(window.chrome&&chrome.webview){chrome.webview.postMessage(JSON.stringify({type:'maf:result',payload:{error:String(err&&err.message||err)," +
+               "message:'Lỗi khi điền: '+String(err&&err.message||err)}}));}" +
+               "  });" +
+               "} catch(e){ console.error('[MAF] lỗi gọi engine', e); } })()";
+    }
 }

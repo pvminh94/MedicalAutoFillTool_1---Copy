@@ -1,178 +1,129 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MedicalAutoFillWeb.Models;
 
 namespace MedicalAutoFillWeb.Services;
 
-public class ScriptBuilderService
+/// <summary>
+/// Sinh script chạy trong DevTools của medinet.
+///
+/// Bản cũ TỰ VIẾT LẠI toàn bộ logic tìm ô/ghi giá trị ở đây (lần thứ 3 trong repo,
+/// sau WinForms và Bridge). Ba bản sao đó lệch nhau, và bản này thiếu: chờ form sẵn
+/// sàng, kiểm tra ghi thành công, iframe, dxComponent... khiến DevTools script
+/// "chạy không lỗi" nhưng không điền gì.
+///
+/// Nay: nhúng Shared/maf-engine.js (đã có test jsdom) + đẩy cấu hình form vào đó.
+/// </summary>
+public static class ScriptBuilderService
 {
-    private readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOpts = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public string BuildAutoFillScript(List<FormProfile> forms)
+    /// <summary>Script đầy đủ = engine + configure(form). Dán vào DevTools Console.</summary>
+    public static string Build(FormProfile? form)
     {
-        var configObj = new
+        var sb = new StringBuilder();
+        sb.AppendLine("/* ============================================================================");
+        sb.AppendLine("   Medical Auto Fill — script DevTools");
+        sb.AppendLine("   Dán vào Console của trang medinet rồi Enter.");
+        sb.AppendLine("   Sau đó dùng: MAF.fill({rows:[[...]], headerRow:[...]})");
+        sb.AppendLine("                MAF.selectAllNo()   MAF.scan()   MAF.state()");
+        sb.AppendLine("   ============================================================================ */");
+
+        string engine;
+        try
         {
-            pasteMode = "tab",
-            selectNoKeywords = new[] { "không", "hầu như không", "không nhớ rõ", "không có", "bình thường", "không rõ" },
-            forms = forms.Select(f => new
-            {
-                id = f.Id,
-                name = f.Name,
-                urlContains = f.UrlContains,
-                fields = f.Fields.Select(m => new
-                {
-                    excelIndex = m.ExcelIndex,
-                    labels = m.Labels,
-                    controlType = m.ControlType
-                }).ToList()
-            }).ToList()
-        };
+            engine = Controllers.EngineAsset.Load();
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine("/* KHÔNG NẠP ĐƯỢC ENGINE: " + ex.Message.Replace("*/", "") + " */");
+            sb.AppendLine("console.error('Medical Auto Fill: thiếu Shared/maf-engine.js');");
+            return sb.ToString();
+        }
 
-        var configJson = JsonSerializer.Serialize(configObj, _jsonOptions);
+        sb.AppendLine(engine);
+        sb.AppendLine();
 
-        return $@"
-(function() {{
-  if (window.__MAF_api) {{ window.__MAF_api.setConfig({configJson}); return; }}
-  var CONFIG = {configJson};
+        if (form != null)
+        {
+            var config = ToEngineConfig(form);
+            sb.AppendLine("MAF.configure(" + JsonSerializer.Serialize(config, JsonOpts) + ");");
+            sb.AppendLine("console.log('Medical Auto Fill: đã nạp cấu hình \"" +
+                          Escape(form.DisplayName ?? form.Name) + "\" (' + MAF.state().formId + '), engine ' + MAF.VERSION);");
+            sb.AppendLine("console.log('Cách dùng: dán dữ liệu rồi gọi  MAF.fill({ rows: [[\"...\"], [\"...\"]], headerRow: [\"Họ và tên\", \"...\"] })');");
+        }
+        else
+        {
+            sb.AppendLine("console.warn('Medical Auto Fill: chưa có form nào trong CSDL — engine chạy ở chế độ tự nhận diện theo URL.');");
+        }
 
-  function setConfig(newConfig) {{ CONFIG = newConfig; console.log('[MAF] Đã cập nhật cấu hình.'); }}
-
-  // ====== NHẬN DIỆN FORM ======
-  function activeForm() {{
-    var url = location.href || '';
-    var found = null;
-    (CONFIG.forms || []).forEach(function(f) {{
-      if (f.urlContains && url.indexOf(f.urlContains) >= 0) found = f;
-    }});
-    return found;
-  }}
-
-  // ====== TÌM Ô NHẬP THEO LABEL ======
-  function findInputByVisualLabel(labelConfig) {{
-    var keys = (Array.isArray(labelConfig) ? labelConfig : [labelConfig]).map(function(l) {{ return String(l).toLowerCase().trim(); }});
-    var els = Array.prototype.slice.call(document.querySelectorAll('label, span, div, td, th, p, b, strong'));
-    var matches = els.filter(function(el) {{
-      var t = el.innerText ? el.innerText.toLowerCase().trim() : '';
-      return keys.indexOf(t) >= 0;
-    }});
-    if (matches.length === 0) return null;
-    var targetLabel = matches[matches.length - 1];
-    var container = targetLabel.closest('.dx-field, .form-group, .row, div') || targetLabel.parentElement;
-    var input = container ? container.querySelector('input:not([type=""hidden""]), textarea') : null;
-    if (!input) {{
-      var lr = targetLabel.getBoundingClientRect();
-      var inputs = Array.prototype.slice.call(document.querySelectorAll('input:not([type=""hidden""]), textarea'));
-      var best = null, min = Infinity;
-      inputs.forEach(function(inp) {{
-        var ir = inp.getBoundingClientRect();
-        var below = ir.top >= lr.bottom - 10 && ir.top <= (lr.bottom + 60) && ir.left >= (lr.left - 20) && ir.left <= (lr.left + 80);
-        if (below) {{ var d = Math.abs(ir.top - lr.bottom); if (d < min) {{ min = d; best = inp; }} }}
-      }});
-      input = best;
-    }}
-    return input;
-  }}
-
-  function setValue(input, value) {{
-    input.focus();
-    input.value = value;
-    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-    input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
-  }}
-
-  // ====== PASTE TỪ CLIPBOARD ======
-  function fillFromClipboard() {{
-    var form = activeForm();
-    if (!form) {{ console.warn('[MAF] Không nhận diện form.'); return; }}
-    var sep = '\t';
-    
-    navigator.clipboard.readText().then(function(text) {{
-      if (!text) return;
-      var rows = text.split(/\r?\n/).map(function(r) {{ return r.split(sep); }});
-      var data = rows[0];
-      if (data.length <= 1) {{ fillSingleValue(text); return; }}
-      var ok = 0, miss = 0;
-      (form.fields || []).forEach(function(f) {{
-        var raw = data[f.excelIndex];
-        if (raw === undefined || raw === null || String(raw).trim() === '') return;
-        var inp = findInputByVisualLabel(f.labels);
-        if (inp) {{ setValue(inp, String(raw).trim()); ok++; }} else miss++;
-      }});
-    }}).catch(function(e) {{
-      console.warn('[MAF] Clipboard lỗi, tạo textarea fallback:', e);
-      var form = activeForm();
-      if (!form) return;
-      var ta = document.createElement('textarea');
-      ta.style.position = 'fixed';
-      ta.style.left = '0';
-      ta.style.top = '0';
-      ta.style.width = '100%';
-      ta.style.height = '200px';
-      ta.style.zIndex = '999999';
-      ta.style.fontSize = '16px';
-      ta.placeholder = 'PASTE (Ctrl+V) dữ liệu Excel vào đây...';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.onpaste = function() {{
-        setTimeout(function() {{
-          var text = ta.value;
-          document.body.removeChild(ta);
-          if (!text) return;
-          var rows = text.split(/\r?\n/).map(function(r) {{ return r.split('\t'); }});
-          var data = rows[0];
-          var ok = 0, miss = 0;
-          (form.fields || []).forEach(function(f) {{
-            var raw = data[f.excelIndex];
-            if (raw === undefined || raw === null || String(raw).trim() === '') return;
-            var inp = findInputByVisualLabel(f.labels);
-            if (inp) {{ setValue(inp, String(raw).trim()); ok++; }} else miss++;
-          }});
-        }}, 100);
-      }};
-      setTimeout(function() {{ if (ta.parentNode) document.body.removeChild(ta); }}, 15000);
-    }});
-  }}
-
-  function fillSingleValue(text) {{
-    var el = document.activeElement;
-    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {{
-      setValue(el, text.trim());
-    }}
-  }}
-
-  // ====== CHỌN KHÔNG HÀNG LOẠT ======
-  function selectAllNo() {{
-    var n = 0;
-    var keywords = (CONFIG.selectNoKeywords || []).map(function(k) {{ return String(k).toLowerCase().trim(); }});
-    Array.prototype.slice.call(document.querySelectorAll('.dx-item-content, .dx-list-item-content, span, label')).forEach(function(el) {{
-      if (!el.innerText) return;
-      var t = el.innerText.trim().toLowerCase();
-      if (keywords.indexOf(t) >= 0) {{
-        var container = el.closest('.dx-radio-button, .dx-item, td, tr') || el.parentElement;
-        var radio = container ? container.querySelector('input[type=""radio""]') : null;
-        if (radio) {{
-          if (!radio.checked) {{ radio.click(); radio.checked = true; radio.dispatchEvent(new Event('change', {{ bubbles: true }})); n++; }}
-        }} else {{
-          var clickable = (container ? container.querySelector('.dx-radio, .dx-radio-value-container') : null) || el;
-          var isChecked = container && (container.getAttribute('aria-checked') === 'true' || container.classList.contains('dx-state-checked'));
-          if (!isChecked) {{ clickable.click(); n++; }}
-        }}
-      }}
-    }});
-  }}
-
-  // ====== SỰ KIỆN ======
-  window.addEventListener('paste', function(e) {{ setTimeout(fillFromClipboard, 10); }});
-  window.addEventListener('keydown', function(e) {{
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {{ e.preventDefault(); selectAllNo(); }}
-  }});
-
-  window.__MAF_api = {{ setConfig: setConfig, selectAllNo: selectAllNo, fillFromClipboard: fillFromClipboard }};
-  console.log('[MAF] Sẵn sàng!');
-}})();
-";
+        return sb.ToString();
     }
+
+    /// <summary>Đổi FormProfile (EF) sang đúng cấu trúc EngineOptions.</summary>
+    public static object ToEngineConfig(FormProfile form) => new
+    {
+        formId = form.Name,
+        url = form.Url,
+        urlRegex = form.UrlRegex,
+        noQuestionLabels = Split(form.NoQuestionLabels),
+        fields = form.Fields
+            .OrderBy(f => f.ExcelIndex)
+            .Select(f => new
+            {
+                index = f.ExcelIndex,
+                labels = Split(f.Labels),
+                // Không có HeaderNames thì tự sinh từ nhãn (cùng quy tắc với C#).
+                headerNames = Split(f.HeaderNames).Count > 0 ? Split(f.HeaderNames) : null,
+                selector = f.Selector,
+                controlType = string.IsNullOrWhiteSpace(f.ControlType) ? "auto" : f.ControlType,
+                required = f.Required,
+                transform = f.Transform
+            })
+            .ToList()
+    };
+
+    /// <summary>URL hiện tại có thuộc form này không (dùng cho badge trạng thái Bridge).</summary>
+    public static bool UrlMatches(FormProfile form, string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+
+        if (!string.IsNullOrWhiteSpace(form.UrlRegex))
+        {
+            // Trường này chứa CHUỖI NHẬN DIỆN (không phải regex thật) — so contains
+            // trước, chỉ thử regex nếu người dùng cố tình viết regex.
+            if (url.Contains(form.UrlRegex, StringComparison.OrdinalIgnoreCase)) return true;
+            try
+            {
+                if (System.Text.RegularExpressions.Regex.IsMatch(url, form.UrlRegex!,
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return true;
+            }
+            catch { /* không phải regex hợp lệ -> bỏ qua */ }
+        }
+
+        if (!string.IsNullOrWhiteSpace(form.Url))
+        {
+            if (string.Equals(form.Url.TrimEnd('/'), url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase)) return true;
+
+            var marker = Path.GetFileName(form.Url.TrimEnd('/'));
+            if (!string.IsNullOrEmpty(marker) && url.Contains(marker, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(form.Name) &&
+            url.Contains(form.Name, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return false;
+    }
+
+    private static List<string> Split(string? s) =>
+        string.IsNullOrWhiteSpace(s)
+            ? new List<string>()
+            : s.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    private static string Escape(string s) => s.Replace("'", "\\'");
 }

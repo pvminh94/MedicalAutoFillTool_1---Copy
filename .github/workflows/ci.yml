@@ -1,0 +1,68 @@
+name: CI
+
+# Vì sao cần: repo này là WinForms + WebView2, chỉ build được trên Windows, còn người
+# bảo trì có thể làm việc trên Linux/macOS. Workflow này biên dịch THẬT cả 3 project .NET
+# (nhờ <EnableWindowsTargeting>true</EnableWindowsTargeting>) và chạy bộ test engine,
+# nên lỗi cú pháp/sai API C# bị bắt ngay khi push thay vì lúc chạy ở bệnh viện.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Test engine + biên dịch .NET
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Kiểm tra cấu trúc repo (C# / csproj / JS / JSON / view / engine API)
+        run: python3 Tests/check-all.py
+
+      - name: Cài jsdom cho test engine
+        run: npm ci
+        working-directory: Tests
+
+      - name: Chạy test engine điền form (48 case, jsdom)
+        run: npm test
+        working-directory: Tests
+
+      - name: Setup .NET 8 + 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Build bản Web (net9.0)
+        run: dotnet build MedicalAutoFillWeb/MedicalAutoFillWeb.csproj -c Release --nologo -v minimal
+
+      - name: Build MedinetBridge (net9.0-windows)
+        run: dotnet build MedinetBridge/MedinetBridge.csproj -c Release --nologo -v minimal
+
+      - name: Build bản WinForms (net8.0-windows)
+        run: dotnet build MedicalAutoFillTool.csproj -c Release --nologo -v minimal
+
+      - name: Publish thử bản WinForms ra 1 file .exe
+        run: >
+          dotnet publish MedicalAutoFillTool.csproj -c Release -r win-x64 --self-contained
+          -p:PublishSingleFile=true -o /tmp/maf-publish --nologo -v minimal
+
+      - name: Kiểm tra .exe có nhúng engine không
+        run: |
+          ls -la /tmp/maf-publish/*.exe
+          if strings /tmp/maf-publish/*.exe | grep -q "maf-engine.js"; then
+            echo "OK: maf-engine.js đã được nhúng vào .exe"
+          else
+            echo "LỖI: không thấy maf-engine.js trong .exe — kiểm tra EmbeddedResource trong csproj"
+            exit 1
+          fi

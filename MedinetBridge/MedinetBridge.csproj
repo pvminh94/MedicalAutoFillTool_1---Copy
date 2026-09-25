@@ -7,10 +7,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>MedinetBridge</AssemblyName>
+    <RootNamespace>MedinetBridge</RootNamespace>
+
+    <!-- Cho phép build trên Linux (CI) — không ảnh hưởng khi build trên Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2957.106" />
+  </ItemGroup>
+
+  <!-- ENGINE DÙNG CHUNG với bản WinForms: một file JS duy nhất, nhúng vào cả hai exe.
+       Đây là fix cho lỗi nặng nhất của bản cũ: Bridge tự sinh script với bộ nhãn
+       hardcode nên bỏ qua toàn bộ mapping cấu hình trên web. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\Shared\maf-engine.js" Link="Shared\maf-engine.js">
+      <LogicalName>maf-engine.js</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

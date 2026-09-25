@@ -1,328 +1,88 @@
 @{
-    Layout = null;
+    ViewData["Title"] = "Dán dữ liệu xét nghiệm";
 }
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Medical Auto Fill Tool</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14.5.0/dist/handsontable.full.min.css" />
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { height: 100%; width: 100%; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; }
-        
-        #paste-area {
-            width: 100%;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        #hot {
-            flex: 1;
-            width: 100%;
-            overflow: hidden;
-        }
-        
-        .status-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 16px;
-            background: #f5f5f5;
-            border-bottom: 1px solid #ddd;
-            font-size: 13px;
-            color: #555;
-            flex-shrink: 0;
-        }
-        .status-bar .title {
-            font-weight: bold;
-            color: #1a237e;
-        }
-        .status-bar .info {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .status-bar .badge {
-            background: #4caf50;
-            color: #fff;
-            padding: 2px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .status-bar .badge.error {
-            background: #f44336;
-        }
-        
-        .bottom-bar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 8px 16px;
-            background: #f5f5f5;
-            border-top: 1px solid #ddd;
-            font-size: 13px;
-            color: #666;
-            flex-shrink: 0;
-        }
-        .bottom-bar .shortcut {
-            display: inline-block;
-            background: #1a237e;
-            color: #fff;
-            padding: 1px 8px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 12px;
-        }
-        .bottom-bar .btn-fill {
-            background: #1a237e;
-            color: #fff;
-            border: none;
-            padding: 6px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
-        }
-        .bottom-bar .btn-fill:hover { background: #283593; }
-        
-        .logo-trigger { cursor: default; user-select: none; }
-        
-        .hidden-config {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #fff;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            z-index: 9999;
-            text-align: center;
-        }
-        .hidden-config.show { display: block; }
-        .hidden-config button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            margin: 6px;
-        }
-        .btn-form { background: #2196f3; color: #fff; }
-        .btn-reset { background: #f44336; color: #fff; }
-        
-        .overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.3);
-            z-index: 9998;
-        }
-        .overlay.show { display: block; }
-        
-        /* Autofill animation */
-        .filling {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #4caf50;
-            color: #fff;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 15px;
-            z-index: 99999;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            animation: slideIn 0.3s ease;
-        }
-        .filling.error { background: #f44336; }
-        @@keyframes slideIn {
-            from { transform: translateX(100px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-    </style>
-</head>
-<body>
-    <div id="paste-area">
-        <!-- Status bar -->
-        <div class="status-bar">
-            <div class="title">
-                <span class="logo-trigger" id="logo">🏥</span> Medical Auto Fill Tool
-            </div>
-            <div class="info">
-                <span id="rowCount">0 dòng</span>
-                <span id="colCount">0 cột</span>
-                <span class="badge" id="statusBadge">Sẵn sàng</span>
-            </div>
+
+<div class="topbar">
+    <h1>Medical Auto Fill</h1>
+    <span class="sub">Web — dán từ Excel, tự điền vào medinet.org.vn</span>
+    <div class="spacer"></div>
+    <span id="bridgeBadge" class="badge idle">Bridge: đang kiểm tra…</span>
+    <a class="nav" href="/">Trang chủ</a>
+    <a class="nav" href="/Home/EditForm">Cấu hình form</a>
+    <a class="nav" href="/Home/Script" target="_blank">Script</a>
+</div>
+
+<div class="page">
+
+    <div class="card">
+        <div class="row">
+            <label for="formSelect"><strong>Form medinet:</strong></label>
+            <select id="formSelect" style="min-width:340px"></select>
+            <button type="button" id="btnReloadForms" class="secondary" title="Đọc lại cấu hình từ CSDL">↻ Tải lại</button>
+            <div class="spacer" style="flex:1"></div>
+            <span id="engineBadge" class="badge idle">Engine: …</span>
         </div>
-        
-        <!-- Handsontable -->
-        <div id="hot"></div>
-        
-        <!-- Bottom bar -->
-        <div class="bottom-bar">
-            <span>📋 Copy từ Excel (<span class="shortcut">Ctrl+C</span>) → Paste vào đây (<span class="shortcut">Ctrl+V</span>)</span>
-            <button class="btn-fill" id="btnFillMedinet" onclick="fillMedinet()">📤 Gửi lên Medinet</button>
-            <span>hoặc nhấn <span class="shortcut">Ctrl+Enter</span> là xong!</span>
-            <span style="flex:1;text-align:right">
-                <span class="shortcut">Ctrl+B</span> = chọn Không hàng loạt
+        <div class="hint" id="formHint">Chọn form cần điền.</div>
+    </div>
+
+    <div class="card">
+        <h2>1. Dán dữ liệu từ Excel</h2>
+        <div class="hint">
+            Bấm vào ô đầu tiên trong bảng rồi nhấn <kbd>Ctrl</kbd>+<kbd>V</kbd>.
+            Dán trực tiếp từ Excel (kể cả vùng nhiều dòng/nhiều cột).
+            Muốn đổi dòng tiêu đề: bấm chọn dòng đó rồi nhấn nút <em>Đánh dấu dòng tiêu đề</em>
+            (hoặc nhấp đúp vào chữ cái tên cột).
+        </div>
+        <div id="grid"></div>
+        <div class="row" style="margin-top:8px">
+            <button type="button" id="btnHeader">⌄ Đánh dấu dòng tiêu đề</button>
+            <button type="button" id="btnClearHeader" class="secondary">Bỏ đánh dấu</button>
+            <button type="button" id="btnAddRows" class="secondary">+ Thêm 20 dòng</button>
+            <button type="button" id="btnClear" class="secondary">🗑 Xóa bảng</button>
+            <span class="grid-stats" id="gridStats">0 dòng · 0 cột</span>
+        </div>
+        <div id="matchInfo" class="grid-stats"></div>
+    </div>
+
+    <div class="card">
+        <h2>2. Gửi lên Medinet</h2>
+        <div class="hint">
+            Trang này KHÔNG tự điền vào medinet (trình duyệt không cho script chạy chéo trang).
+            Lệnh được gửi tới <span class="mono">MedinetBridge</span> đang chạy trên máy chủ — nơi giữ phiên đăng nhập medinet.
+            Dòng sẽ được điền = <strong>dòng bạn đang chọn</strong> trong bảng.
+        </div>
+        <div class="row">
+            <button type="button" id="btnFill">▶ Gửi dòng đang chọn lên Medinet</button>
+            <button type="button" id="btnDryRun" class="secondary">🔍 Chạy thử (không ghi)</button>
+            <button type="button" id="btnSelectNo" class="secondary">Chọn "Không" cho mọi câu hỏi</button>
+            <label style="margin-left:8px"><input type="checkbox" id="chkReload"> Tải lại trang medinet trước khi điền</label>
+            <span class="muted small" style="margin-left:8px">
+                Phím tắt: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> gửi · <kbd>Ctrl</kbd>+<kbd>B</kbd> chọn "Không" · <kbd>Ctrl</kbd>+<kbd>R</kbd> phân tích lại khớp cột
             </span>
         </div>
     </div>
-    
-    <!-- Overlay + Config -->
-    <div class="overlay" id="overlay"></div>
-    <div class="hidden-config" id="configPanel">
-        <h3 style="margin-bottom:12px;color:#1a237e">⚙ Cấu hình</h3>
-        <button class="btn-form" onclick="openForms()">📝 Quản lý Form</button>
-        <button class="btn-reset" onclick="resetForms()">🔄 Reset mặc định</button>
-        <button onclick="hideConfig()" style="background:#999;color:#fff">✖ Đóng</button>
+
+    <div class="card">
+        <h2>3. Kết quả</h2>
+        <div id="statusBox"><span class="badge idle">Chưa thực hiện</span></div>
+        <div id="reportBox" class="report"></div>
     </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/handsontable@14.5.0/dist/handsontable.full.min.js"></script>
-    <script>
-        // ====== CONFIG LOGO CLICK ======
-        var clickCount = 0;
-        document.getElementById('logo').onclick = function() {
-            clickCount++;
-            if (clickCount >= 5) {
-                document.getElementById('configPanel').classList.add('show');
-                document.getElementById('overlay').classList.add('show');
-                clickCount = 0;
-            }
-            setTimeout(function() { clickCount = 0; }, 3000);
-        };
-        function openForms() { window.open('/Home/Forms', '_blank', 'width=950,height=600'); hideConfig(); }
-        function hideConfig() {
-            document.getElementById('configPanel').classList.remove('show');
-            document.getElementById('overlay').classList.remove('show');
-        }
-        function resetForms() {
-            if (!confirm('⚠️ Reset tất cả form về mặc định?')) return;
-            fetch('/Home/ResetForms', { method: 'POST' })
-                .then(function() { alert('✅ Đã reset!'); })
-                .catch(function(e) { alert('❌ Lỗi: ' + e.message); });
-        }
-        
-        // ====== HANDSONTABLE ======
-        var container = document.getElementById('hot');
-        var hot = new Handsontable(container, {
-            data: [],
-            colHeaders: true,
-            rowHeaders: true,
-            contextMenu: true,
-            height: '100%',
-            width: '100%',
-            stretchH: 'all',
-            manualColumnResize: true,
-            manualRowResize: true,
-            licenseKey: 'non-commercial-and-evaluation',
-            afterChange: function(changes, source) {
-                updateStats();
-            }
-        });
-        
-        // Handle paste from Excel directly
-        Handsontable.dom.addEvent(container, 'paste', function(e) {
-            // Let Handsontable handle the default paste
-            setTimeout(updateStats, 50);
-        });
-        
-        // Ctrl+Enter = fill medinet
-        Handsontable.dom.addEvent(container, 'keydown', function(e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-                fillMedinet();
-            }
-        });
-        
-        function updateStats() {
-            var data = hot.getData();
-            var rows = data.length;
-            var cols = rows > 0 ? (data[0] ? data[0].length : 0) : 0;
-            document.getElementById('rowCount').textContent = rows + ' dòng';
-            document.getElementById('colCount').textContent = cols + ' cột';
-            var badge = document.getElementById('statusBadge');
-            if (rows > 0) {
-                badge.textContent = '✅ Có dữ liệu';
-                badge.className = 'badge';
-            } else {
-                badge.textContent = '⏳ Chờ paste...';
-                badge.className = 'badge';
-            }
-        }
-        
-        // ====== FILL MEDINET ======
-        function fillMedinet() {
-            var data = hot.getData();
-            if (!data || data.length === 0 || !data[0]) {
-                showToast('⚠️ Chưa có dữ liệu! Copy Excel rồi Ctrl+V vào bảng trên.', 'error');
-                return;
-            }
-            
-            var btn = document.getElementById('btnFillMedinet');
-            btn.textContent = '⏳ Đang gửi...';
-            btn.disabled = true;
-            
-            fetch('/Home/GetScript')
-                .then(function(r) { return r.text(); })
-                .then(function(script) {
-                    // Gửi dữ liệu cùng với script
-                    var payload = {
-                        rows: data,
-                        script: script
-                    };
-                    
-                    return fetch('/Home/FillMedinet', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    }).then(function(resp) { return resp.json(); });
-                })
-                .then(function(result) {
-                    if (result.success) {
-                        showToast('✅ ' + result.message, 'success');
-                    } else {
-                        showToast('❌ ' + result.message, 'error');
-                    }
-                })
-                .catch(function(e) {
-                    showToast('❌ Lỗi: ' + e.message, 'error');
-                })
-                .finally(function() {
-                    btn.textContent = '📤 Gửi lên Medinet';
-                    btn.disabled = false;
-                });
-        }
-        
-        function showToast(msg, type) {
-            var existing = document.querySelector('.filling');
-            if (existing) existing.remove();
-            
-            var toast = document.createElement('div');
-            toast.className = 'filling' + (type === 'error' ? ' error' : '');
-            toast.textContent = msg;
-            document.body.appendChild(toast);
-            setTimeout(function() { toast.remove(); }, 4000);
-        }
-        
-        // ====== AUTO PASTE HANDLING ======
-        // Nếu user Ctrl+V từ Excel vào - tự động nhận diện
-        document.addEventListener('paste', function(e) {
-            // Handsontable handles its own paste, this is for additional detection
-            setTimeout(function() {
-                var data = hot.getData();
-                if (data.length > 0 && data[0].length > 1) {
-                    document.getElementById('statusBadge').textContent = '✅ Có dữ liệu';
-                    document.getElementById('statusBadge').className = 'badge';
-                }
-            }, 100);
-        });
-    </script>
-</body>
-</html>
+
+    <div class="card">
+        <h2>Khi không điền được — kiểm tra theo thứ tự</h2>
+        <ol class="small muted" style="margin:6px 0 0 20px;line-height:1.8">
+            <li>Badge <strong>Bridge</strong> ở góc trên phải phải màu xanh. Nếu đỏ: trên <em>máy chủ</em> chưa chạy <span class="mono">MedinetBridge.exe</span>.</li>
+            <li>Trong cửa sổ Bridge, medinet phải đang mở <strong>đúng form</strong> cần điền và <strong>đã đăng nhập</strong>.</li>
+            <li>Bấm <strong>Chạy thử (không ghi)</strong> để xem engine khớp được bao nhiêu cột — nếu 0, xem mục <em>Cấu hình form</em> để bổ sung nhãn/tên cột Excel.</li>
+            <li>Dữ liệu phải có <strong>dòng tiêu đề</strong> (tên cột) để engine ghép đúng cột. Không có tiêu đề thì engine đoán theo thứ tự cột, rất dễ lệch.</li>
+        </ol>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Engine dùng chung: phục vụ từ chính app, KHÔNG dùng CDN.
+         Nếu file này không nạp được thì trang vẫn dán được (PasteGrid độc lập). -->
+    <script src="/Home/EngineJs" defer></script>
+    <script src="/js/paste-grid.js" defer></script>
+    <script src="/js/app.js" defer></script>
+}

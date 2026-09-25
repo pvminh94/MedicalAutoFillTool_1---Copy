@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <title>Dán dữ liệu — Medical Auto Fill</title>
+  <style>
+    :root {
+      --bg: #f4f6f9; --card: #fff; --line: #dfe3e8; --text: #1f2933; --muted: #6b7785;
+      --brand: #0b5cad; --brand-dark: #094a8c; --ok: #16a34a; --warn: #d97706; --err: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 13px/1.45 "Segoe UI", system-ui, Arial, sans-serif;
+    }
+    header {
+      background: linear-gradient(180deg, #0d67bd, #0b5cad); color: #fff;
+      padding: 8px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+    header .spacer { flex: 1; }
+    .badge {
+      padding: 2px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600;
+      background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .25);
+      cursor: default;
+    }
+    .badge.ok { background: #e7f7ec; color: #14713a; border-color: #b8e6c6; }
+    .badge.err { background: #fdeaea; color: #a41d1d; border-color: #f3c4c4; }
+    .badge.warn { background: #fdf3e2; color: #92610a; border-color: #f3ddb0; }
+    main { padding: 12px 14px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+      padding: 10px 12px; margin-bottom: 10px;
+    }
+    .card h2 { margin: 0 0 6px; font-size: 13px; }
+    .hint { color: var(--muted); font-size: 11.5px; margin: 2px 0 8px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button {
+      background: var(--brand); color: #fff; border: 1px solid var(--brand-dark);
+      padding: 6px 11px; border-radius: 4px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+    }
+    button:hover { background: var(--brand-dark); }
+    button:disabled { background: #9aa5b1; border-color: #8a95a1; cursor: not-allowed; }
+    button.secondary { background: #fff; color: var(--text); border-color: var(--line); }
+    button.secondary:hover { background: #f0f3f7; }
+    button.danger { background: var(--err); border-color: #b91c1c; }
+    textarea {
+      width: 100%; min-height: 74px; resize: vertical; font: 12px/1.4 Consolas, monospace;
+      border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; background: #fff;
+    }
+    textarea:focus { outline: 2px solid rgba(11, 92, 173, .25); border-color: var(--brand); }
+    .grid { overflow: auto; max-height: 40vh; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+    table { border-collapse: collapse; width: max-content; min-width: 100%; }
+    th, td { border-right: 1px solid #e9ecf0; border-bottom: 1px solid #e9ecf0; padding: 3px 6px; font-size: 12px; text-align: left; white-space: nowrap; }
+    thead th { position: sticky; top: 0; background: #eef2f7; font-weight: 600; z-index: 2; }
+    td.num, th.num { text-align: right; color: #7b8794; background: #f7f9fb; }
+    tr.header td { background: #fffdf3; font-weight: 600; }
+    tr.selected td { background: #eaf3ff; }
+    tr.empty td { color: #b6bec8; }
+    .kbd {
+      background: #fff; border: 1px solid #ccd3db; border-bottom-width: 2px; border-radius: 3px;
+      padding: 0 4px; font: 11px Consolas, monospace;
+    }
+    #status { font-size: 12.5px; }
+    #status .box { padding: 7px 10px; border-radius: 4px; border-left: 4px solid #9aa5b1; background: #f7f9fb; white-space: pre-wrap; }
+    #status.ok .box { border-left-color: var(--ok); background: #f2fbf5; }
+    #status.err .box { border-left-color: var(--err); background: #fff6f6; }
+    #status.warn .box { border-left-color: var(--warn); background: #fffbf2; }
+    .report ul { margin: 6px 0 0 16px; padding: 0; }
+    .report li { margin: 1px 0; font-size: 12px; }
+    .mono { font-family: Consolas, monospace; font-size: 11.5px; }
+    .muted { color: var(--muted); }
+    .stat { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dán dữ liệu xét nghiệm</h1>
+    <div class="spacer"></div>
+    <span id="engineBadge" class="badge">Engine: …</span>
+    <span id="pageBadge" class="badge">Trang: …</span>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>1. Lấy dữ liệu từ Excel</h2>
+      <div class="hint">
+        Trong Excel: bôi đen cả <strong>dòng tiêu đề</strong> lẫn các dòng số liệu rồi <span class="kbd">Ctrl</span>+<span class="kbd">C</span>.
+        Quay lại đây bấm <strong>Đọc clipboard</strong>, hoặc dán thẳng vào ô dưới
+        (<span class="kbd">Ctrl</span>+<span class="kbd">V</span>).
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <button id="btnClip">📋 Đọc clipboard</button>
+        <button id="btnParse" class="secondary">Phân tích ô bên dưới</button>
+        <button id="btnClear" class="secondary">Xóa</button>
+        <span class="spacer" style="flex:1"></span>
+        <label><input type="checkbox" id="chkAutoFill"> Điền ngay sau khi đọc clipboard</label>
+      </div>
+      <textarea id="pasteBox" placeholder="Dán dữ liệu vào đây (Ctrl+V)…"></textarea>
+      <div class="stat" id="parseStat"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. Kiểm tra và chọn dòng</h2>
+      <div class="hint">
+        Dòng tô vàng = <strong>dòng tiêu đề</strong> (engine tự nhận diện, có thể sửa bằng nút bên dưới).
+        Chọn nút tròn ở dòng muốn điền.
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <button id="btnHeader" class="secondary">⌄ Đánh dấu dòng tiêu đề = dòng đang chọn</button>
+        <button id="btnNoHeader" class="secondary">Bỏ tiêu đề</button>
+        <span id="matchStat" class="stat"></span>
+      </div>
+      <div class="grid" id="grid"><div class="muted" style="padding:12px">Chưa có dữ liệu.</div></div>
+    </div>
+
+    <div class="card">
+      <h2>3. Điền vào medinet</h2>
+      <div class="row">
+        <button id="btnFill">▶ Điền dòng đã chọn</button>
+        <button id="btnFillAll" class="secondary">▶▶ Điền tất cả dòng</button>
+        <button id="btnDry" class="secondary">🔍 Chạy thử (không ghi)</button>
+        <button id="btnNo" class="secondary">Chọn "Không" mọi câu hỏi</button>
+        <button id="btnScan" class="secondary">Quét ô trên trang</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btnReload" class="secondary">↻ Tải lại medinet</button>
+        <button id="btnImport" class="secondary">⬆ Nhập forms.json…</button>
+        <button id="btnExport" class="secondary">⬇ Xuất cấu hình…</button>
+        <span class="spacer" style="flex:1"></span>
+        <span id="cfgStat" class="stat"></span>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        Phím tắt (chỉ khi cửa sổ medinet đang focus):
+        <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">V</span> mở panel ·
+        <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">F</span> dán &amp; điền ngay ·
+        <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">N</span> chọn "Không".
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>4. Kết quả</h2>
+      <div id="status"><div class="box">Chưa thực hiện.</div></div>
+      <div id="report" class="report"></div>
+    </div>
+  </main>
+
+  <script src="panel.js"></script>
+</body>
+</html>
