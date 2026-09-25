@@ -742,6 +742,9 @@ export class ReportsService {
       ...s.blocks.flatMap((b) => b.rows.map((r) => r.id)),
     ]);
 
+    // Kỳ đã chốt & khoá thì giao diện hiển thị cảnh báo và không cho sửa
+    const locked = await this.lockedSnapshotFor(templateId, period.to);
+
     return {
       template: full.template,
       columns: full.columns,
@@ -751,12 +754,43 @@ export class ReportsService {
       values,
       notes,
       perDay,
+      locked: locked ? { id: locked.id, title: locked.title } : null,
       stats: {
         totalCells: rowIds.length * full.columns.filter((c) => c.kind === 'INPUT').length * days.length,
         filledCells: filledCells.size,
         entryCount: entries.length,
       },
     };
+  }
+
+  /**
+   * Kỳ báo cáo đã bị "khoá" bởi một bản chốt số liệu chưa?
+   * Số liệu đã chốt chính thức thì không cho sửa tiếp để bảo đảm số đã báo cáo.
+   */
+  private async lockedSnapshotFor(templateId: number, entryDate: string) {
+    const [locked] = await this.db.db
+      .select({ id: reportSnapshots.id, title: reportSnapshots.title, status: reportSnapshots.status })
+      .from(reportSnapshots)
+      .where(
+        and(
+          eq(reportSnapshots.templateId, templateId),
+          eq(reportSnapshots.status, 'LOCKED'),
+          sql`${entryDate}::date between ${reportSnapshots.dateFrom} and ${reportSnapshots.dateTo}`,
+        ),
+      )
+      .limit(1);
+    return locked ?? null;
+  }
+
+  /** Chặn ghi số liệu vào kỳ đã khoá */
+  private async assertNotLocked(templateId: number, entryDate: string): Promise<void> {
+    const locked = await this.lockedSnapshotFor(templateId, entryDate);
+    if (locked) {
+      throw new BadRequestException(
+        `Kỳ báo cáo này đã được chốt và khoá (${locked.title}) — không sửa được số liệu. ` +
+          'Hãy mở khoá bản chốt hoặc liên hệ Ban KHTH.',
+      );
+    }
   }
 
   /** Ghi số liệu hàng loạt (upsert theo ô) + nhật ký thay đổi từng ô */
@@ -783,6 +817,9 @@ export class ReportsService {
       const period = resolvePeriod(dto.period ?? 'day', dto.entryDate, dto.entryDate, dto.dateTo);
       entryDate = period.to;
     }
+
+    // Số liệu của kỳ đã chốt và khoá thì không sửa được nữa
+    await this.assertNotLocked(dto.templateId, entryDate);
 
     // Khoá nhận biết một ô số liệu: dòng × cột × ngày (mọi bản ghi dưới đây cùng ngày)
     const cellKey = (rowId: number, colKey: string): string => `${rowId}|${colKey}|${entryDate}`;
@@ -889,6 +926,7 @@ export class ReportsService {
         ),
       );
     if (!before) throw new NotFoundException('Không tìm thấy ô số liệu');
+    await this.assertNotLocked(templateId, entryDate);
     await this.db.transaction(async (tx) => {
       await tx.delete(reportEntries).where(eq(reportEntries.id, before.id));
       await tx.insert(reportEntryAudits).values({

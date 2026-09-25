@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, CheckCircle2, FileSpreadsheet, Save, Undo2 } from 'lucide-react';
+import { CalendarDays, CheckCircle2, FileSpreadsheet, Lock, Save, Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -64,6 +64,8 @@ interface EntryGrid {
   values: Record<string, number>;
   notes: Record<string, string>;
   stats: { totalCells: number; filledCells: number; entryCount: number };
+  /** Bản chốt số liệu đang khoá kỳ này (nếu có) */
+  locked: { id: number; title: string } | null;
 }
 
 const PERIODS = [
@@ -202,13 +204,31 @@ export default function ReportEntryPage() {
               </Button>
             ) : null}
             {can('report.entry.update') ? (
-              <Button disabled={dirtyCount === 0} loading={save.isPending} onClick={() => save.mutate()}>
+              <Button
+                disabled={dirtyCount === 0 || !!data?.locked}
+                loading={save.isPending}
+                onClick={() => save.mutate()}
+                title={data?.locked ? 'Kỳ này đã được chốt và khoá' : undefined}
+              >
                 <Save /> Lưu số liệu
               </Button>
             ) : null}
           </>
         }
       />
+
+      {data?.locked ? (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950">
+          <Lock className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <div>
+            <div className="font-medium">Kỳ này đã được chốt và khoá số liệu</div>
+            <div className="text-xs text-[var(--muted-foreground)]">
+              {data.locked.title} — số liệu đã báo cáo nên không sửa được nữa. Cần điều chỉnh,
+              đề nghị quản trị mở khoá bản chốt ở trang Báo cáo.
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <Card>
         <div className="flex flex-wrap items-end gap-3 p-4">

@@ -120,11 +120,12 @@ export class RolesService {
       .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
       .where(eq(rolePermissions.roleId, id))
       .orderBy(asc(permissions.module), asc(permissions.code));
+    // Chỉ tính tài khoản đang dùng: tài khoản đã xoá mềm không còn chặn việc xoá vai trò
     const members = await this.db.db
       .select({ id: users.id, username: users.username, fullName: users.fullName, title: users.title })
       .from(userRoles)
       .innerJoin(users, eq(users.id, userRoles.userId))
-      .where(eq(userRoles.roleId, id))
+      .where(and(eq(userRoles.roleId, id), isNull(users.deletedAt)))
       .orderBy(asc(users.fullName));
     return { ...role, permissions: perms, members };
   }
