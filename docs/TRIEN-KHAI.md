@@ -142,6 +142,7 @@ Trước khi nâng cấp nên sao lưu CSDL. Nếu bản mới có thay đổi c
 
 | Hiện tượng | Cách xử lý |
 |---|---|
+| `failed to bind host port ... address already in use` | Cổng đã bị dịch vụ/container khác giữ (thường gặp khi cài chung máy với ERPNext/Grafana…). Xem ai giữ: `sudo ss -ltnp \| grep ':<cổng> '`. Chạy lại với cổng trống: `sudo bash deploy/install.sh --web-port 3300 --api-port 4400` (script tự kiểm tra cổng trước khi build và gợi ý cổng trống) |
 | `api` khởi động rồi thoát, log báo lỗi CSDL | kiểm tra `POSTGRES_PASSWORD` trong `.env` khớp với dịch vụ `postgres`; `docker compose logs postgres` |
 | Giao diện báo "Không kết nối được máy chủ" | `docker compose ps` xem `api` còn chạy không; kiểm tra `API_PROXY_TARGET` của dịch vụ `web` |
 | Đăng nhập báo sai tài khoản | tài khoản quản trị chỉ được tạo ở lần chạy `db:seed` đầu tiên; tạo lại bằng `docker compose exec api npx tsx scripts/create-admin.ts` |

@@ -19,6 +19,8 @@
 #    • Tự sinh .env với bí mật ngẫu nhiên nếu chưa có (mật khẩu chỉ dùng ký
 #      tự [0-9a-f] để an toàn khi nhúng vào URL kết nối).
 #    • Dựng và khởi động toàn bộ: PostgreSQL · Redis · API (NestJS) · Web (Next).
+#    • Soi cổng TRƯỚC khi dựng ảnh: cổng bận sẽ báo ngay (kể cả ai đang giữ:
+#      tiến trình lạ hay container khác) kèm gợi ý cổng trống + lệnh chạy lại.
 #    • TỰ KIỂM TRA sau khi cài: /health (CSDL + cache), đăng nhập admin thật,
 #      giao diện web, đường proxy web → API, trạng thái 4 container. Cuối script
 #      có kết luận rõ ràng: OK hay chưa OK.
@@ -57,7 +59,7 @@ die()  { printf '\n%s✗ LỖI:%s %s\n' "$C_R" "$C_0" "$*" >&2; exit 1; }
 
 trap 'rc=$?; [[ $rc -ne 0 ]] && printf "\n%s✗ Cài đặt thất bại (mã %s)%s — xem lại thông báo phía trên.\n" "$C_R" "$rc" "$C_0" >&2; exit $rc' EXIT
 
-usage() { sed -n '2,44p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "${BASH_SOURCE[0]}"; exit 0; }
 
 gen_hex() { # gen_hex <số-byte>
   if command -v openssl >/dev/null 2>&1; then openssl rand -hex "$1";
@@ -94,6 +96,38 @@ install_pkgs() { # cài gói bằng trình quản lý có sẵn
   elif command -v yum >/dev/null 2>&1; then yum install -y "$@"
   elif command -v apk >/dev/null 2>&1; then apk add --no-cache "$@"
   else die "Không tìm thấy trình quản lý gói (apt/dnf/yum/apk). Hãy cài thủ công: $*"; fi
+}
+
+port_owner() { # tên container đang publish cổng (rỗng nếu không có)
+  docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null \
+    | awk -F'\t' -v p=":$1->" 'index($2, p) {print $1; exit}' || true
+}
+
+port_busy() { # có tiến trình nào đang nghe trên cổng localhost không
+  local p=$1
+  if command -v timeout >/dev/null 2>&1 \
+     && timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/${p}" 2>/dev/null; then
+    return 0
+  fi
+  if command -v ss >/dev/null 2>&1 \
+     && ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]${p}$"; then
+    return 0
+  fi
+  if command -v netstat >/dev/null 2>&1 \
+     && netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]${p}$"; then
+    return 0
+  fi
+  return 1
+}
+
+port_free() { [[ -z "$(port_owner "$1")" ]] && ! port_busy "$1"; }
+
+suggest_port() { # gợi ý cổng trống kế tiếp
+  local p
+  for ((p=$1+1; p<=$1+50 && p<=65535; p++)); do
+    if port_free "$p"; then printf '%s' "$p"; return 0; fi
+  done
+  printf '%s' '?'
 }
 
 # ------------------------------------------------------------------- tùy chọn
@@ -258,15 +292,24 @@ fi
 set_env ADMIN_USERNAME "$ADMIN_USERNAME"
 
 # Cổng: giữ giá trị đã có trong .env khi chạy lại (không ghi đè ngầm)
-WEB_PORT="${WEB_PORT:-$(env_get WEB_PORT)}"
+OLD_WEB_PORT=$(env_get WEB_PORT)
+OLD_API_PORT=$(env_get API_PORT)
+WEB_PORT="${WEB_PORT:-$OLD_WEB_PORT}"
 WEB_PORT="${WEB_PORT:-3000}"
-API_PORT="${API_PORT:-$(env_get API_PORT)}"
+API_PORT="${API_PORT:-$OLD_API_PORT}"
 API_PORT="${API_PORT:-4000}"
+for p in "$WEB_PORT" "$API_PORT"; do
+  [[ "$p" =~ ^[0-9]+$ && "$p" -ge 1 && "$p" -le 65535 ]] \
+    || die "Cổng không hợp lệ: '$p' (cần số từ 1 đến 65535)"
+done
+[[ "$WEB_PORT" != "$API_PORT" ]] || die "--web-port và --api-port đang trùng nhau ($WEB_PORT)"
+PORTS_CHANGED=0
+[[ "$WEB_PORT" != "$OLD_WEB_PORT" || "$API_PORT" != "$OLD_API_PORT" ]] && PORTS_CHANGED=1
 set_env WEB_PORT "$WEB_PORT"
 set_env API_PORT "$API_PORT"
 
-# CORS: chỉ tự cập nhật khi tạo mới / có --domain / biến CORS_ORIGINS truyền vào
-if [[ $CREATED_ENV -eq 1 || -n "$DOMAIN" || -n "${CORS_ORIGINS:-}" ]]; then
+# CORS: tự cập nhật khi tạo mới / có --domain / biến CORS_ORIGINS / ĐỔI CỔNG
+if [[ $CREATED_ENV -eq 1 || $PORTS_CHANGED -eq 1 || -n "$DOMAIN" || -n "${CORS_ORIGINS:-}" ]]; then
   CORS="${CORS_ORIGINS:-http://localhost:${WEB_PORT},http://127.0.0.1:${WEB_PORT},http://${PUBLIC_IP}:${WEB_PORT},http://${PUBLIC_IP}:${API_PORT}}"
   [[ -n "$DOMAIN" ]] && CORS="https://${DOMAIN},${CORS}"
   set_env CORS_ORIGINS "$CORS"
@@ -282,12 +325,40 @@ ok "Bí mật ngẫu nhiên đã ghi vào .env (mật khẩu DB/Redis/JWT chỉ 
 ok "Cổng: Web=${WEB_PORT} · API=${API_PORT}"
 
 # --------------------------------------------------------- 4) Dựng & khởi động
-step '4/6 — Dựng và khởi động hệ thống (lần đầu mất vài phút)'
-for p in "$WEB_PORT" "$API_PORT"; do
-  if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]${p}$"; then
-    warn "Cổng $p có vẻ đang bị chiếm — nếu lệnh dưới đây lỗi, đổi bằng --web-port/--api-port"
+step '4/6 — Kiểm tra cổng, dựng và khởi động hệ thống (lần đầu mất vài phút)'
+# Soi cổng TRƯỚC khi dựng ảnh — bận là báo ngay kèm gợi ý, khỏi tốn công build
+fail_ports=(); SUG_WEB=''; SUG_API=''
+check_port() { # check_port web|api CỔNG
+  local name=$1 p=$2 owner
+  owner=$(port_owner "$p")
+  if [[ "$owner" == qlbs-* ]]; then
+    warn "Cổng $p ($name) do container $owner của QLBS giữ — sẽ được dựng lại"
+    return 0
   fi
-done
+  if [[ -n "$owner" ]]; then
+    fail_ports+=("• Cổng $p ($name) đang bị container \"$owner\" giữ.")
+    if [[ $name == web ]]; then SUG_WEB=$(suggest_port "$p"); else SUG_API=$(suggest_port "$p"); fi
+    return 0
+  fi
+  if port_busy "$p"; then
+    fail_ports+=("• Cổng $p ($name) đang bị tiến trình khác trên máy chiếm (xem: sudo ss -ltnp | grep ':${p} ')")
+    if [[ $name == web ]]; then SUG_WEB=$(suggest_port "$p"); else SUG_API=$(suggest_port "$p"); fi
+    return 0
+  fi
+}
+check_port web "$WEB_PORT"
+check_port api "$API_PORT"
+if [[ ${#fail_ports[@]} -gt 0 ]]; then
+  SCRIPT_CMD="$0"; [[ "$0" == *install.sh ]] || SCRIPT_CMD='deploy/install.sh'
+  SUG_WEB=${SUG_WEB:-$WEB_PORT}; SUG_API=${SUG_API:-$API_PORT}
+  {
+    printf '%s\n' "${fail_ports[@]}"
+    echo
+    echo 'Chọn cổng trống khác rồi chạy lại (giữ nguyên .env, ảnh build cũ vẫn dùng được):'
+    echo "    sudo bash $SCRIPT_CMD --web-port ${SUG_WEB} --api-port ${SUG_API}"
+  } >&2
+  die 'cổng bị chiếm — dừng TRƯỚC khi dựng ảnh để không mất thời gian build.'
+fi
 mkdir -p data/postgres data/redis data/uploads data/backups
 "${COMPOSE[@]}" up -d --build
 ok "Đã khởi động: PostgreSQL · Redis · API · Web"
