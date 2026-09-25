@@ -53,10 +53,13 @@ let fontBytes: Record<string, Buffer> | null = null;
 
 function fontDir(): string {
   const candidates = [
+    // Build chuẩn (dist/infra/...) → dist/assets/fonts (nest-cli copy assets vào dist)
+    path.resolve(__dirname, '..', '..', 'assets', 'fonts'),
+    // Build cũ (dist/src/infra/...) hoặc chạy tsx từ mã nguồn (src/infra/...)
     path.resolve(__dirname, '..', '..', '..', 'assets', 'fonts'),
+    path.resolve(__dirname, '..', '..', '..', '..', 'assets', 'fonts'),
     path.resolve(process.cwd(), 'assets', 'fonts'),
     path.resolve(process.cwd(), 'backend', 'assets', 'fonts'),
-    path.resolve(__dirname, '..', '..', '..', '..', 'assets', 'fonts'),
   ];
   return candidates.find((p) => fs.existsSync(p)) ?? candidates[0];
 }
