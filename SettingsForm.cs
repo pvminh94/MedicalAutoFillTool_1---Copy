@@ -29,6 +29,8 @@ public class SettingsForm : Form
     private readonly CheckBox _chkPreferHeader = new();
     private readonly CheckBox _chkAutoFillOnPaste = new();
     private readonly CheckBox _chkHijackCtrlV = new();
+    private readonly CheckBox _chkOneClickFill = new();
+    private readonly CheckBox _chkOneClickAdvance = new();
     private readonly CheckBox _chkFillImmediately = new();
     private readonly CheckBox _chkEnableQueue = new();
     private readonly CheckBox _chkSelectNoHotkey = new();
@@ -304,8 +306,12 @@ public class SettingsForm : Form
         leftCol.Controls.Add(chkLeft, 0, 3);
 
         var rightCol = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, AutoSize = true };
-        for (int i = 0; i < 6; i++) rightCol.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        // 5 dòng đầu là các ô số (cao cố định 34px). HAI dòng cuối phải AutoSize:
+        // trước đây nhóm checkbox cũng bị nhét vào dòng Absolute 34px nên 6 ô checkbox
+        // chỉ hiện được ~1 ô (phần còn lại bị cắt), không cuộn được.
+        for (int i = 0; i < 5; i++) rightCol.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // nhóm checkbox
+        rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // dòng gợi ý
 
         Num(_numReadyTimeout, "Chờ form render tối đa (ms)", 500, 60000, 100, "Form medinet nặng nên để 6000-10000. Tăng lên nếu hay bị thiếu trường.");
         Num(_numMaxAttempts, "Số lần thử ghi lại 1 ô", 1, 10, 1, "Ô bị widget hoàn tác giá trị sẽ được ghi lại chừng này lần.");
@@ -320,12 +326,16 @@ public class SettingsForm : Form
         rightCol.Controls.Add(WrapNum("Nghỉ giữa 2 dòng (ms):", _numPerRowDelay), 0, 4);
 
         var chkRight = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true };
+        Check(_chkOneClickFill, "⚡ Bấm ▶ Điền (F8) là TỰ ĐỌC clipboard rồi điền luôn — bỏ bước 📋 Dán");
+        Check(_chkOneClickAdvance, "     Bấm ▶ Điền liên tiếp với cùng nội dung copy = sang dòng kế tiếp");
         Check(_chkFillImmediately, "Điền NGAY sau khi dán (không cần bấm nút)");
         Check(_chkAutoFillOnPaste, "Cho engine tự điền khi Ctrl+V ngay trong trang medinet");
         Check(_chkHijackCtrlV, "⚠ Giành Ctrl+V thường để dán Excel (sẽ KHÔNG dán chữ vào ô medinet được)");
         Check(_chkAllowDevTools, "Cho phép mở DevTools (F12)");
         Check(_chkOpenDevTools, "Mở DevTools ngay khi khởi động");
         Check(_chkDebugEngine, "Engine in log chi tiết ra DevTools");
+        chkRight.Controls.Add(_chkOneClickFill);
+        chkRight.Controls.Add(_chkOneClickAdvance);
         chkRight.Controls.Add(_chkFillImmediately);
         chkRight.Controls.Add(_chkAutoFillOnPaste);
         chkRight.Controls.Add(_chkHijackCtrlV);
@@ -479,6 +489,8 @@ public class SettingsForm : Form
         _chkSelectNoHotkey.Checked = o.EnableSelectNoHotkey;
         _chkEnableQueue.Checked = _config.EnableRowQueue;
         _chkLogToFile.Checked = _config.LogToFile;
+        _chkOneClickFill.Checked = _config.OneClickFill;
+        _chkOneClickAdvance.Checked = _config.OneClickAdvanceRows;
         _chkFillImmediately.Checked = _config.FillImmediatelyAfterPaste;
         _chkAutoFillOnPaste.Checked = o.AutoFillOnPaste;
         _chkHijackCtrlV.Checked = _config.HijackPlainCtrlV;
@@ -516,6 +528,8 @@ public class SettingsForm : Form
 
         _config.EnableRowQueue = _chkEnableQueue.Checked;
         _config.LogToFile = _chkLogToFile.Checked;
+        _config.OneClickFill = _chkOneClickFill.Checked;
+        _config.OneClickAdvanceRows = _chkOneClickAdvance.Checked;
         _config.FillImmediatelyAfterPaste = _chkFillImmediately.Checked;
         _config.HijackPlainCtrlV = _chkHijackCtrlV.Checked;
         _config.AllowDevTools = _chkAllowDevTools.Checked;

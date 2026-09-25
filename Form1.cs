@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
@@ -46,6 +47,13 @@ public partial class Form1 : Form
     private int _queueTotal;
     private int _queueDone;
     private int _queueOk;
+
+    // Trạng thái chế độ ĐIỀN MỘT CHẠM (▶ Điền / F8): nhớ vân tay của nội dung
+    // clipboard lần cuối để biết người dùng vừa copy LẠI hay vẫn dùng nội dung cũ,
+    // và đang đứng ở dòng nào để lần bấm kế tiếp sang dòng kế.
+    private string _lastClipHash = "";
+    private int _oneClickRow;
+    private bool _oneClickActive;
 
     // ---------------------------------------------------------------- Khởi tạo
     public Form1()
@@ -162,13 +170,17 @@ public partial class Form1 : Form
         };
         _cmbForm.SelectedIndexChanged += (_, _) => OnFormSelectionChanged();
 
-        var btnPaste = NavButton("📋 Dán", "Đọc dữ liệu vừa copy từ Excel (Ctrl+Shift+V)");
+        var btnPaste = NavButton("📋 Dán", "Xem trước dữ liệu vừa copy rồi mới điền (Ctrl+Shift+V). KHÔNG bắt buộc — muốn điền ngay thì bấm ▶ Điền (F8)");
         btnPaste.Font = new Font(_nav.Font, FontStyle.Bold);
         btnPaste.Click += (_, _) => PasteFromClipboard(showPanel: true, fillImmediately: false);
 
-        var btnFill = NavButton("▶ Điền", "Điền dòng đang chọn lên medinet (Ctrl+Enter)");
+        // Nút CHÍNH của quy trình một-chạm: copy trong Excel -> bấm đây là điền luôn.
+        var btnFill = NavButton("⚡ Điền", "Copy trong Excel rồi bấm đây: TỰ ĐỌC clipboard và điền luôn, không qua bước Dán (F8).\n" +
+                                           "Bấm lần nữa với cùng nội dung copy = sang dòng kế tiếp.\n" +
+                                           "Nếu clipboard không phải dữ liệu bảng thì điền dòng đang chọn trong bảng đã dán.");
         btnFill.ForeColor = Color.FromArgb(180, 255, 200);
-        btnFill.Click += (_, _) => FillSelectedRow(dryRun: false);
+        btnFill.Font = new Font(_nav.Font, FontStyle.Bold);
+        btnFill.Click += (_, _) => SmartFill();
 
         var btnFillAll = NavButton("⏭ Tất cả", "Điền lần lượt mọi dòng trong bảng");
         btnFillAll.Click += (_, _) => FillAllRows();
@@ -777,6 +789,10 @@ public partial class Form1 : Form
                 Eat();
                 TogglePastePanel();
                 return;
+            case Keys.F8:
+                Eat();
+                SmartFill();
+                return;
             case Keys.F9:
                 Eat();
                 FillNextInQueue();
@@ -808,6 +824,9 @@ public partial class Form1 : Form
                 return true;
             case Keys.F7:
                 TogglePastePanel();
+                return true;
+            case Keys.F8:
+                SmartFill();
                 return true;
             case Keys.F9:
                 FillNextInQueue();
@@ -955,12 +974,150 @@ public partial class Form1 : Form
             : "Đang tự nhận diện form theo URL.");
     }
 
+    /// <summary>
+    /// ĐIỀN MỘT CHẠM — "copy trong Excel rồi bấm ▶ Điền là xong", bỏ bước 📋 Dán.
+    ///
+    /// Luật (vừa nhanh vừa KHÔNG phá luồng cũ):
+    ///  1. Đọc clipboard bằng API native (ClipboardService, có retry) và phân tích bảng.
+    ///  2. Nếu clipboard CÓ dữ liệu bảng:
+    ///       • nội dung KHÁC lần bấm trước -> nạp bảng mới, điền dòng dữ liệu ĐẦU TIÊN
+    ///         (không mở bảng xem trước — đây chính là bước được bỏ bớt);
+    ///       • nội dung GIỐNG lần trước, khối copy có >1 dòng và OneClickAdvanceRows
+    ///         -> sang dòng KẾ TIẾP (bấm liên tiếp = điền lần lượt từng bệnh nhân);
+    ///       • đã tới dòng cuối -> quay vòng về dòng đầu.
+    ///  3. Nếu clipboard KHÔNG đọc được hoặc không phải dữ liệu bảng -> giữ nguyên bảng
+    ///     đã dán và điền dòng đang chọn (hành vi cũ). Nhờ vậy lỡ copy một đoạn chữ
+    ///     khác cũng không mất dữ liệu đang làm dở.
+    ///
+    /// Kiểm tra khớp cột TRƯỚC khi điền: copy thiếu dòng tiêu đề, hoặc tiêu đề Excel
+    /// lệch tên so với cấu hình, mà không khớp được trường nào thì app MỞ BẢNG XEM
+    /// TRƯỚC kèm cảnh báo — thay vì điền rồi im lặng không có gì xảy ra (kiểu lỗi khó
+    /// chịu nhất ở phòng khám, vì người dùng không biết vì sao).
+    /// </summary>
+    private void SmartFill()
+    {
+        if (_busy) { SetStatus("⏳ Đang điền, chờ chút..."); return; }
+
+        // Tắt một-chạm thì ▶ Điền hành xử đúng như bản trước.
+        if (!_config.OneClickFill) { FillSelectedRow(dryRun: false); return; }
+
+        var fields = ActiveFields();
+        if (fields.Count == 0) { WarnNoMapping(); return; }
+
+        if (!_coreReady || _webView?.CoreWebView2 == null)
+        {
+            SetStatus("❌ Trang chưa sẵn sàng. Chờ medinet tải xong hoặc bấm ⟳ Tải lại.");
+            Toast("❌ Trang chưa sẵn sàng", true);
+            return;
+        }
+
+        var (clip, table) = ClipboardService.ReadTable(fields, DelimiterFromConfig());
+
+        // (3) Clipboard không dùng được -> quay về hành vi cũ, KHÔNG phá dữ liệu đã dán.
+        if (!clip.Ok || table.IsEmpty)
+        {
+            if (_table != null && !_table.IsEmpty)
+            {
+                AppLogger.Info("Một-chạm: clipboard không có dữ liệu bảng (" + (clip.Error ?? "rỗng") +
+                               ") -> điền dòng đang chọn của bảng đã dán.");
+                FillSelectedRow(dryRun: false);
+            }
+            else
+            {
+                var detail = clip.Error ?? "Clipboard không có dữ liệu bảng copied từ Excel.";
+                SetStatus("⚠ " + detail);
+                Toast("⚠ Chưa có dữ liệu — copy trong Excel rồi bấm lại", true);
+                AppLogger.Warn($"Một-chạm: {detail} (sau {clip.Attempts} lần thử / {clip.ElapsedMs} ms)");
+            }
+            return;
+        }
+
+        // Kiểm tra khớp cột trước khi điền.
+        var map = TsvParser.ResolveColumns(fields, table.HeaderRow, out int headerMatched);
+        int inRange = map.Count(c => c >= 0 && c < table.ColCount);
+        int first = table.FirstDataRow;
+        int dataRows = table.RowCount - first;
+
+        if (dataRows <= 0)
+        {
+            SetStatus("⚠ Clipboard chỉ có dòng tiêu đề, không có dòng số liệu nào.");
+            Toast("⚠ Chỉ có tiêu đề, chưa có số liệu", true);
+            return;
+        }
+
+        bool headerButNoMatch = table.HasHeader && headerMatched == 0;
+        if (headerButNoMatch || inRange == 0)
+        {
+            _table = table;
+            ShowPastePanel(true);
+            _pastePanel.SetTable(table, fields);
+            _pastePanel.ClearReport();
+            var why = headerButNoMatch
+                ? "có dòng tiêu đề nhưng KHÔNG khớp tên cột nào với ánh xạ của form"
+                : "vị trí cột vượt quá số cột đã copy";
+            SetStatus($"⚠ Không điền được: {why}. Đã mở bảng dữ liệu để xem chi tiết.");
+            Toast("⚠ Không khớp cột nào — xem bảng dữ liệu", true);
+            var hdr = table.HeaderRow;
+            AppLogger.Warn($"Một-chạm: {why}. Khớp tiêu đề {headerMatched}/{fields.Count}, " +
+                           $"trong phạm vi {inRange}/{fields.Count}. Tiêu đề Excel: " +
+                           (hdr == null ? "(không có)" : string.Join(" | ", hdr.Take(10))));
+            return;
+        }
+
+        // (2) Quyết định điền dòng nào.
+        string hash = HashText(clip.BestText);
+        bool sameClip = hash == _lastClipHash && _table != null && _table.RowCount == table.RowCount;
+        int row = first;
+        if (_config.OneClickAdvanceRows && sameClip && dataRows > 1 && _oneClickRow + 1 < table.RowCount)
+            row = _oneClickRow + 1;
+        if (row < first || row >= table.RowCount) row = first;
+
+        bool isNew = !sameClip;      // chỉ dùng cho log + thanh trạng thái, không toast
+        _lastClipHash = hash;
+        _oneClickRow = row;
+        _oneClickActive = true;
+        _table = table;
+        _queue.Clear();      // một-chạm tự quản lý dòng, không dùng hàng đợi F9
+        _queuePos = 0;
+
+        // Nạp vào bảng nhưng KHÔNG hiện ra: để F7 / Ctrl+Enter / báo cáo vẫn nhất quán.
+        _pastePanel.SetTable(table, fields);
+        _pastePanel.ClearReport();
+        _pastePanel.SelectDataRow(row);
+
+        AppLogger.Info($"Một-chạm: {(isNew ? "clipboard MỚI" : "cùng clipboard")}, " +
+                       $"{dataRows} dòng dữ liệu, khớp tiêu đề {headerMatched}/{fields.Count} trường, " +
+                       $"điền dòng {row - first + 1}/{dataRows}, " +
+                       $"đọc clipboard {clip.ElapsedMs} ms / {clip.Attempts} lần thử");
+
+        FillRow(row, dryRun: false);
+
+        // Đặt SAU FillRow vì FillRow cũng ghi thanh trạng thái; dòng này phải là dòng
+        // người dùng nhìn thấy trong lúc chờ kết quả.
+        SetStatus($"⚡ {(isNew ? "Clipboard mới → điền" : "Điền tiếp")} dòng {row - first + 1}/{dataRows}" +
+                  $" (khớp tiêu đề {headerMatched}/{fields.Count} trường)" +
+                  (dataRows > 1 && _config.OneClickAdvanceRows ? " — bấm ▶ Điền (F8) lần nữa để sang dòng kế." : ""));
+    }
+
+    /// <summary>
+    /// Vân tay nội dung clipboard, để biết người dùng có copy lại hay không.
+    /// Dùng SHA256 thay vì so nguyên chuỗi: khối copy có thể hàng trăm dòng, và
+    /// GetHashCode() của string bị ngẫu nhiên hoá theo tiến trình nên không đáng tin
+    /// khi muốn so sánh ổn định.
+    /// </summary>
+    private static string HashText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+    }
+
     private void FillSelectedRow(bool dryRun)
     {
+        _oneClickActive = false;   // luồng có bảng xem trước, không phải một-chạm
         if (_table == null || _table.IsEmpty)
         {
-            SetStatus("⚠ Chưa có dữ liệu. Copy trong Excel rồi bấm 📋 Dán (Ctrl+Shift+V).");
-            Toast("⚠ Chưa có dữ liệu — bấm 📋 Dán", true);
+            SetStatus("⚠ Chưa có dữ liệu. Copy trong Excel rồi bấm ▶ Điền (F8) — không cần bước Dán.");
+            Toast("⚠ Chưa có dữ liệu — copy trong Excel rồi bấm ▶ Điền", true);
             return;
         }
         FillRow(_pastePanel.SelectedDataRowIndex, dryRun);
@@ -1031,6 +1188,7 @@ public partial class Form1 : Form
     private void FillQueue(List<int> rowIndexes)
     {
         if (rowIndexes == null || rowIndexes.Count == 0) return;
+        _oneClickActive = false;   // hàng đợi F9 là luồng của bảng xem trước
         _queue = rowIndexes;
         _queuePos = 0;
         _queueTotal = rowIndexes.Count;
@@ -1122,9 +1280,20 @@ public partial class Form1 : Form
         if (_progress.Visible && _queueTotal > 0)
             _progress.Value = Math.Min(100, (int)(100.0 * _queueDone / _queueTotal));
 
-        // Còn dòng trong hàng đợi thì nhắc người dùng bấm F9.
-        if (_queue.Count > 0 && _queuePos < _queue.Count - 1)
+        // Nhắc bước kế tiếp ĐÚNG THEO CHẾ ĐỘ vừa dùng: một-chạm thì F8, hàng đợi thì F9.
+        if (_oneClickActive && _table != null)
+        {
+            int first = _table.FirstDataRow;
+            int total = _table.RowCount - first;
+            if (total > 1 && _config.OneClickAdvanceRows && _oneClickRow + 1 < _table.RowCount)
+                SetStatus($"{icon} {report.Summary}  •  Bấm ⚡ Điền (F8) lần nữa để sang dòng kế tiếp ({_oneClickRow - first + 2}/{total}).");
+            else if (total > 1 && _config.OneClickAdvanceRows)
+                SetStatus($"{icon} {report.Summary}  •  Đã tới dòng cuối ({total}/{total}) — bấm F8 lần nữa sẽ quay về dòng đầu.");
+        }
+        else if (_queue.Count > 0 && _queuePos < _queue.Count - 1)
+        {
             SetStatus($"{icon} {report.Summary}  •  Bấm F9 để điền dòng kế tiếp ({_queuePos + 2}/{_queueTotal}).");
+        }
     }
 
     private void FinishFillUi()
@@ -1258,7 +1427,13 @@ public partial class Form1 : Form
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 Padding = new Padding(10, 0, 10, 0)
             };
-            lbl.Location = new Point(ClientSize.Width - lbl.Width - 16, 52);
+            // Xếp chồng: đếm số toast đang hiện để đặt cái mới ngay bên dưới,
+            // thay vì vẽ tất cả lên cùng một toạ độ rồi đè lên nhau.
+            lbl.Tag = "toast";
+            int stack = 0;
+            foreach (Control c in Controls)
+                if (c is Label && Equals(c.Tag, "toast")) stack++;
+            lbl.Location = new Point(ClientSize.Width - lbl.Width - 16, 52 + stack * 44);
             lbl.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             Controls.Add(lbl);
             lbl.BringToFront();

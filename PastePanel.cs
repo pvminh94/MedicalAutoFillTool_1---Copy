@@ -58,6 +58,27 @@ public sealed class PastePanel : UserControl
         }
     }
 
+    /// <summary>
+    /// Chọn dòng theo chỉ số TUYỆT ĐỐI trong Table.Rows (kể cả dòng tiêu đề).
+    /// Cần cho chế độ điền một-chạm: bảng không hiện ra nhưng vẫn phải biết dòng nào
+    /// vừa được điền, để khi người dùng mở bảng (F7) thì thấy đúng dòng đó đang chọn
+    /// và Ctrl+Enter sẽ điền lại chính dòng ấy chứ không nhảy về dòng đầu.
+    /// Lưới chỉ hiện tối đa DisplayRowCap dòng nên vượt quá thì bỏ qua, không ném lỗi.
+    /// </summary>
+    public void SelectDataRow(int rowIndex)
+    {
+        try
+        {
+            if (_table == null || _table.IsEmpty) return;
+            if (rowIndex < 0 || rowIndex >= _table.RowCount) return;
+            if (_grid.ColumnCount == 0 || rowIndex >= _grid.Rows.Count) return;
+            _grid.ClearSelection();
+            _grid.Rows[rowIndex].Selected = true;
+            _grid.CurrentCell = _grid.Rows[rowIndex].Cells[0];
+        }
+        catch { /* lưới chưa dựng xong hoặc đang trong lúc nạp lại — bỏ qua */ }
+    }
+
     public PastePanel()
     {
         Height = 240;

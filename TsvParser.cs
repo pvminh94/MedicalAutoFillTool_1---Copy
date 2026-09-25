@@ -197,7 +197,20 @@ public static class TsvParser
     /// Trả về mảng song song với <paramref name="fields"/>; -1 = không xác định được.
     /// </summary>
     public static int[] ResolveColumns(IReadOnlyList<FieldMapping> fields, string[]? headerRow)
+        => ResolveColumns(fields, headerRow, out _);
+
+    /// <summary>
+    /// Như trên, nhưng trả thêm SỐ TRƯỜNG KHỚP ĐƯỢC THEO TÊN TIÊU ĐỀ.
+    ///
+    /// Vì sao cần: hàm này KHÔNG BAO GIỜ trả -1 — không khớp tên thì rơi về vị trí
+    /// cột (ExcelIndex). Nên chỉ nhìn mảng kết quả sẽ không phân biệt được "khớp theo
+    /// tên tiêu đề" với "đoán theo vị trí", mà đó đúng là điều phải cảnh báo TRƯỚC khi
+    /// điền ở chế độ một-chạm (người dùng copy thiếu dòng tiêu đề, hoặc tiêu đề Excel
+    /// đã đổi tên so với cấu hình).
+    /// </summary>
+    public static int[] ResolveColumns(IReadOnlyList<FieldMapping> fields, string[]? headerRow, out int headerMatched)
     {
+        headerMatched = 0;
         var cols = new int[fields.Count];
         for (int i = 0; i < cols.Length; i++) cols[i] = fields[i].ExcelIndex;
         if (headerRow == null || headerRow.Length == 0) return cols;
@@ -240,7 +253,7 @@ public static class TsvParser
                 }
             }
 
-            if (best >= 0 && bestScore >= 650) { cols[i] = best; used[best] = true; }
+            if (best >= 0 && bestScore >= 650) { cols[i] = best; used[best] = true; headerMatched++; }
         }
         return cols;
     }

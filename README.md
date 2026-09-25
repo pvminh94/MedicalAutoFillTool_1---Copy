@@ -55,40 +55,63 @@ App tự chọn thư mục **ghi được**: ưu tiên cạnh file `.exe`, khôn
 
 ---
 
-## 3. Cách dùng (5 bước)
+## 3. Cách dùng
+
+### Cách nhanh — 3 bước, KHÔNG cần bước dán (khuyên dùng)
 
 1. **Mở app** → medinet hiện ra → **đăng nhập** như bình thường (app nhớ phiên cho lần sau).
-2. Mở form cần điền (ví dụ *Phiếu Cận Lâm Sàng*). App tự nhận diện form theo URL — thanh trạng thái sẽ hiện tên form và số trường.
-3. Trong **Excel**: bôi đen cả **dòng tiêu đề** lẫn các dòng số liệu → `Ctrl+C`.
-4. Trong app: bấm **📋 Dán** (hoặc `Ctrl+Shift+V`) → bảng xem trước hiện ra, app tự tìm dòng tiêu đề và báo *"khớp 31/33 cột"*.
-5. Chọn dòng bệnh nhân → bấm **▶ Điền** (hoặc `Ctrl+Enter`). Xem báo cáo: bao nhiêu trường OK, trường nào không tìm thấy ô, trường nào Excel để trống.
+2. Mở form cần điền (ví dụ *Phiếu Cận Lâm Sàng*). App tự nhận diện form theo URL — thanh trạng thái hiện tên form và số trường.
+3. Trong **Excel**: bôi đen dòng cần điền (kèm **dòng tiêu đề**) → `Ctrl+C`. Sang app bấm **⚡ Điền** (hoặc `F8`) → **xong**. Không có bước dán, không có bảng xem trước.
+
+Bấm **⚡ Điền** lần nữa thì chuyện gì xảy ra:
+
+| Tình huống | Hành vi |
+|---|---|
+| Vừa **copy nội dung mới** trong Excel | Nạp bảng mới, điền **dòng đầu** |
+| **Vẫn nội dung cũ**, khối copy có nhiều dòng | **Sang dòng kế tiếp** (copy cả khối 15 bệnh nhân một lần rồi bấm 15 lần = điền lần lượt từng người; tới dòng cuối thì quay về dòng đầu) |
+| Clipboard **không phải dữ liệu bảng** (lỡ copy đoạn chữ) | **Giữ nguyên** bảng đã dán và điền dòng đang chọn → không mất dữ liệu đang làm dở |
+| Copy **thiếu dòng tiêu đề** hoặc tiêu đề **lệch tên** mà không khớp được cột nào | **Tự mở bảng xem trước kèm cảnh báo** — không điền im lặng rồi để bạn đoán |
+
+> Muốn mỗi lần bấm đều điền **dòng đầu** (không tự sang dòng kế) thì tắt tùy chọn *"Bấm ▶ Điền liên tiếp..."* trong **⚙ Cài đặt**. Muốn nút **⚡ Điền** hành xử như bản cũ (chỉ điền dòng đang chọn) thì tắt *"⚡ Bấm ▶ Điền (F8) là TỰ ĐỌC clipboard..."*.
+
+### Cách có xem trước — khi muốn soát lại dữ liệu trước khi điền
+
+1. Mở app, đăng nhập, mở form (như trên).
+2. Trong **Excel**: bôi đen cả **dòng tiêu đề** lẫn các dòng số liệu → `Ctrl+C`.
+3. Trong app: bấm **📋 Dán** (hoặc `Ctrl+Shift+V`) → bảng xem trước hiện ra, app tự tìm dòng tiêu đề và báo *"khớp 31/33 cột"*.
+4. Chọn dòng bệnh nhân → bấm `Ctrl+Enter` (hoặc **⏭ Tất cả** để xếp hàng đợi, `F9` sang dòng kế).
+5. Xem báo cáo: bao nhiêu trường OK, trường nào không tìm thấy ô, trường nào Excel để trống.
 
 ### Thanh công cụ
 
 | Nút | Chức năng |
 |---|---|
 | 🏠 Trang chủ · ⟳ Tải lại | Điều hướng medinet |
-| **📋 Dán** | Đọc clipboard (có retry) và hiện bảng xem trước |
-| **▶ Điền** | Điền dòng đang chọn |
+| **⚡ Điền** | **Một chạm**: tự đọc clipboard vừa copy từ Excel rồi điền luôn (`F8`) |
+| 📋 Dán | Đọc clipboard (có retry) và hiện **bảng xem trước** — bước tùy chọn |
 | ⏭ Tất cả | Điền lần lượt mọi dòng trong hàng đợi (`F9` = dòng kế tiếp) |
 | 🧪 Kiểm tra | **Chạy thử**: cho biết mỗi cột sẽ ghi vào ô nào, **không ghi thật** |
 | ☑ Chọn 'Không' | Bấm "Không" cho hàng loạt câu hỏi Có/Không |
 | ▤ Bảng dữ liệu | Ẩn/hiện bảng xem trước |
-| ⚙ Cài đặt | Cấu hình form, nhãn, tên cột Excel, selector |
+| ⚙ Cài đặt | Cấu hình form, nhãn, tên cột Excel, selector, hành vi một-chạm |
 | 📜 Log | Nhật ký chi tiết (kèm nút copy để gửi cho người hỗ trợ) |
 
 ### Phím tắt
 
 | Phím | Tác dụng |
 |---|---|
+| **`F8`** | **Một chạm**: đọc clipboard → điền luôn (bấm lặp = sang dòng kế) |
 | `Ctrl+Shift+V` | Đọc clipboard → hiện bảng xem trước |
-| `Ctrl+Enter` | Điền dòng đang chọn |
+| `Ctrl+Enter` | Điền dòng đang chọn **trong bảng xem trước** |
 | `F7` | Ẩn/hiện bảng dữ liệu |
 | `F9` | Điền dòng kế tiếp trong hàng đợi |
 | `F10` | Chạy thử (không ghi) |
+| `Ctrl+B` | Chọn "Không" hàng loạt |
 | `Ctrl+Shift+S` | Mở Cài đặt |
 | `Ctrl+Shift+L` | Xem log |
 | `F12` | DevTools (nếu bật trong Cài đặt) |
+
+Phím tắt chạy được **cả khi con trỏ đang nằm trong trang medinet** lẫn khi đang ở thanh công cụ/bảng dữ liệu.
 
 > **Mẹo quan trọng:** luôn copy **kèm dòng tiêu đề**. Có tiêu đề thì app ghép cột **theo tên**; không có tiêu đề thì phải đoán theo vị trí cột, rất dễ lệch.
 

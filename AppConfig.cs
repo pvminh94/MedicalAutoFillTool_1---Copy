@@ -141,6 +141,28 @@ public class AppConfig
     /// <summary>Tự điền ngay sau khi dán (không cần bấm thêm nút). Tắt để an toàn.</summary>
     public bool FillImmediatelyAfterPaste { get; set; } = false;
 
+    /// <summary>
+    /// ĐIỀN MỘT CHẠM (mặc định BẬT) — bỏ bớt bước "📋 Dán".
+    /// Quy trình chỉ còn: copy trong Excel -> bấm "▶ Điền" (hoặc F8) -> xong.
+    /// Nút "▶ Điền" sẽ TỰ ĐỌC CLIPBOARD, phân tích bảng rồi điền luôn, không mở
+    /// bảng xem trước.
+    ///
+    /// An toàn: nếu clipboard KHÔNG đọc được hoặc không phải dữ liệu bảng (lỡ copy
+    /// một đoạn chữ), app quay về hành vi cũ — điền dòng đang chọn của bảng đã dán —
+    /// nên không bao giờ mất dữ liệu đang làm chỉ vì clipboard đổi sang thứ khác.
+    ///
+    /// TẮT tùy chọn này thì "▶ Điền" chỉ điền dòng đang chọn, y như bản trước.
+    /// </summary>
+    public bool OneClickFill { get; set; } = true;
+
+    /// <summary>
+    /// Khi copy NGUYÊN MỘT KHỐI nhiều dòng rồi bấm "▶ Điền" LIÊN TIẾP mà không copy
+    /// lại: mỗi lần bấm sang dòng KẾ TIẾP (điền lần lượt từng bệnh nhân, tới dòng
+    /// cuối thì quay về dòng đầu). Copy nội dung MỚI thì bắt đầu lại từ dòng đầu.
+    /// TẮT đi thì lần nào cũng điền dòng đầu của khối vừa copy.
+    /// </summary>
+    public bool OneClickAdvanceRows { get; set; } = true;
+
     /// <summary>Điền liên tiếp các dòng trong bảng (hàng đợi) khi bấm "Điền tất cả".</summary>
     public bool EnableRowQueue { get; set; } = true;
 
