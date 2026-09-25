@@ -1,0 +1,200 @@
+/**
+ * Cấu hình hệ thống — lưu dạng khoá/giá trị JSON, nhóm theo `group`.
+ * Cho phép quản trị thay đổi thông tin bệnh viện, quy tắc nghiệp vụ, mẫu in mặc định…
+ * mà không cần sửa mã nguồn hay triển khai lại.
+ */
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { DbService } from '../../db/db.service';
+import { settings } from '../../db/schema';
+import { CacheService } from '../../infra/cache/cache.service';
+
+export interface SettingItem {
+  key: string;
+  value: unknown;
+  group?: string;
+  label?: string;
+  description?: string;
+  valueType?: string;
+  isPublic?: boolean;
+}
+
+const CACHE_PREFIX = 'setting:';
+
+@Injectable()
+export class SettingsService {
+  constructor(
+    private readonly db: DbService,
+    private readonly cache: CacheService,
+  ) {}
+
+  private async invalidate(key?: string): Promise<void> {
+    if (key) await this.cache.del(`${CACHE_PREFIX}${key}`);
+    await this.cache.delByPrefix(CACHE_PREFIX);
+    await this.cache.del('setting:all');
+  }
+
+  async all() {
+    const rows = await this.db.db
+      .select()
+      .from(settings)
+      .orderBy(asc(settings.group), asc(settings.key));
+    const grouped = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const list = grouped.get(row.group) ?? [];
+      list.push(row);
+      grouped.set(row.group, list);
+    }
+    return {
+      items: rows,
+      groups: [...grouped.entries()].map(([group, items]) => ({ group, items })),
+    };
+  }
+
+  /** Cấu hình công khai cho giao diện (không lộ thông tin nội bộ) */
+  async publicSettings(): Promise<Record<string, unknown>> {
+    const rows = await this.db.db
+      .select({ key: settings.key, value: settings.value })
+      .from(settings)
+      .where(eq(settings.isPublic, true));
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  }
+
+  async get<T = unknown>(key: string, fallback: T | null = null): Promise<T | null> {
+    const cached = await this.cache.get<T>(`${CACHE_PREFIX}${key}`);
+    if (cached !== null) return cached;
+    const [row] = await this.db.db
+      .select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, key))
+      .limit(1);
+    if (!row) return fallback;
+    await this.cache.set(`${CACHE_PREFIX}${key}`, row.value, 600);
+    return row.value as T;
+  }
+
+  async getMany(keys: string[]): Promise<Record<string, unknown>> {
+    if (keys.length === 0) return {};
+    const rows = await this.db.db
+      .select({ key: settings.key, value: settings.value })
+      .from(settings)
+      .where(inArray(settings.key, keys));
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  }
+
+  async set(item: SettingItem, userId?: number) {
+    await this.db.db
+      .insert(settings)
+      .values({
+        key: item.key,
+        value: item.value as never,
+        group: item.group ?? 'general',
+        label: item.label ?? '',
+        description: item.description ?? '',
+        valueType: item.valueType ?? this.inferType(item.value),
+        isPublic: item.isPublic ?? false,
+        updatedBy: userId ?? null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: {
+          value: item.value as never,
+          ...(item.group !== undefined ? { group: item.group } : {}),
+          ...(item.label !== undefined ? { label: item.label } : {}),
+          ...(item.description !== undefined ? { description: item.description } : {}),
+          ...(item.valueType !== undefined ? { valueType: item.valueType } : {}),
+          ...(item.isPublic !== undefined ? { isPublic: item.isPublic } : {}),
+          updatedBy: userId ?? null,
+          updatedAt: new Date(),
+        },
+      });
+    await this.invalidate(item.key);
+    return { key: item.key, value: item.value };
+  }
+
+  async setMany(items: SettingItem[], userId?: number) {
+    for (const item of items) await this.set(item, userId);
+    return { message: `Đã lưu ${items.length} cấu hình`, updated: items.length };
+  }
+
+  async remove(key: string) {
+    const [deleted] = await this.db.db.delete(settings).where(eq(settings.key, key)).returning();
+    if (!deleted) throw new NotFoundException(`Không tìm thấy cấu hình "${key}"`);
+    await this.invalidate(key);
+    return { message: `Đã xoá cấu hình ${key}` };
+  }
+
+  /** Đặt lại cấu hình về giá trị mặc định của hệ thống */
+  async resetToDefaults(userId?: number) {
+    const defaults = defaultSettings();
+    await this.setMany(defaults, userId);
+    return { message: 'Đã khôi phục cấu hình mặc định', total: defaults.length };
+  }
+
+  async ensureDefaults(userId?: number): Promise<number> {
+    const defaults = defaultSettings();
+    const [countRow] = await this.db.db.select({ total: sql<number>`count(*)::int` }).from(settings);
+    if ((countRow?.total ?? 0) > 0) return 0;
+    await this.setMany(defaults, userId);
+    return defaults.length;
+  }
+
+  private inferType(value: unknown): string {
+    if (typeof value === 'boolean') return 'boolean';
+    if (typeof value === 'number') return 'number';
+    if (typeof value === 'object') return 'json';
+    return 'string';
+  }
+}
+
+/** Danh mục cấu hình mặc định — quản trị sửa được toàn bộ */
+export function defaultSettings(): SettingItem[] {
+  return [
+    // Thông tin đơn vị
+    { key: 'hospital.name', value: 'BỆNH VIỆN QUÂN Y 4', group: 'hospital', label: 'Tên bệnh viện', isPublic: true },
+    { key: 'hospital.shortName', value: 'BVQY4', group: 'hospital', label: 'Tên viết tắt', isPublic: true },
+    { key: 'hospital.address', value: '', group: 'hospital', label: 'Địa chỉ', isPublic: true },
+    { key: 'hospital.phone', value: '', group: 'hospital', label: 'Điện thoại', isPublic: true },
+    { key: 'hospital.website', value: '', group: 'hospital', label: 'Website', isPublic: true },
+    { key: 'hospital.logo', value: '', group: 'hospital', label: 'Logo (đường dẫn)', isPublic: true },
+    { key: 'hospital.director', value: '', group: 'hospital', label: 'Giám đốc bệnh viện', isPublic: true },
+
+    // Quy tắc HSBA
+    { key: 'hsba.codePrefix', value: 'SDS', group: 'hsba', label: 'Tiền tố mã phiếu sửa HSBA', isPublic: true },
+    { key: 'hsba.requirePatientCode', value: false, group: 'hsba', label: 'Bắt buộc nhập mã KCB', valueType: 'boolean' },
+    { key: 'hsba.allowEditAfterSign', value: false, group: 'hsba', label: 'Cho sửa phiếu sau khi đã ký', valueType: 'boolean' },
+    { key: 'hsba.defaultWorkflow', value: 'MAC_DINH', group: 'hsba', label: 'Quy trình ký mặc định', isPublic: true },
+    { key: 'hsba.enableSignatureHash', value: true, group: 'hsba', label: 'Băm xác thực nội dung khi ký', valueType: 'boolean' },
+
+    // Quy tắc báo cáo
+    { key: 'report.weekStartsOn', value: 'monday', group: 'report', label: 'Tuần bắt đầu từ', isPublic: true },
+    { key: 'report.carryOver', value: true, group: 'report', label: 'Tự động lấy số dư kỳ trước', valueType: 'boolean' },
+    { key: 'report.allowBackdated', value: true, group: 'report', label: 'Cho nhập số liệu ngày cũ', valueType: 'boolean' },
+    { key: 'report.lockPreviousPeriods', value: false, group: 'report', label: 'Khoá số liệu các kỳ đã qua', valueType: 'boolean' },
+    { key: 'report.defaultPeriod', value: 'week', group: 'report', label: 'Kỳ báo cáo mặc định', isPublic: true },
+    { key: 'report.decimals', value: 0, group: 'report', label: 'Số chữ số thập phân trên báo cáo', valueType: 'number', isPublic: true },
+
+    // Bản in
+    { key: 'print.defaultPaper', value: 'A4', group: 'print', label: 'Khổ giấy mặc định', isPublic: true },
+    { key: 'print.defaultFont', value: 'Times New Roman', group: 'print', label: 'Phông chữ mặc định', isPublic: true },
+    { key: 'print.defaultFontSize', value: 13, group: 'print', label: 'Cỡ chữ mặc định (pt)', valueType: 'number', isPublic: true },
+
+    // Nhập / xuất
+    { key: 'export.dateFormat', value: 'dd/MM/yyyy', group: 'export', label: 'Định dạng ngày khi xuất', isPublic: true },
+    { key: 'export.excelTemplate', value: '', group: 'export', label: 'Đường dẫn tệp Excel mẫu' },
+    { key: 'export.includeSignature', value: true, group: 'export', label: 'Chèn chữ ký vào PDF', valueType: 'boolean' },
+
+    // Thông báo
+    { key: 'notify.onNewRequest', value: true, group: 'notification', label: 'Thông báo khi có phiếu mới', valueType: 'boolean' },
+    { key: 'notify.onSign', value: true, group: 'notification', label: 'Thông báo khi phiếu được ký', valueType: 'boolean' },
+    { key: 'notify.onReturn', value: true, group: 'notification', label: 'Thông báo khi phiếu bị trả lại', valueType: 'boolean' },
+
+    // Hệ thống
+    { key: 'system.sessionHours', value: 12, group: 'system', label: 'Thời gian phiên đăng nhập (giờ)', valueType: 'number' },
+    { key: 'system.passwordMinLength', value: 6, group: 'system', label: 'Độ dài mật khẩu tối thiểu', valueType: 'number', isPublic: true },
+    { key: 'system.maintenanceMode', value: false, group: 'system', label: 'Chế độ bảo trì', valueType: 'boolean' },
+    { key: 'system.maintenanceMessage', value: 'Hệ thống đang bảo trì, vui lòng quay lại sau.', group: 'system', label: 'Thông báo bảo trì', isPublic: true },
+    { key: 'system.dashboardNotice', value: '', group: 'system', label: 'Thông báo trên trang chủ', isPublic: true },
+  ];
+}

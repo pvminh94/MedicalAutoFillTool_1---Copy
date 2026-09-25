@@ -1,0 +1,36 @@
+# ---------- Bước 1: cài phụ thuộc ----------
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+# ---------- Bước 2: biên dịch TypeScript ----------
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build && npm prune --omit=dev
+
+# ---------- Bước 3: ảnh chạy thật ----------
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+# fontconfig + dejavu để PDF/bản in có đủ ký tự tiếng Việt khi dùng font hệ thống
+RUN apk add --no-cache tini fontconfig ttf-dejavu && fc-cache -f
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/tsconfig.json ./tsconfig.json
+
+# Thư mục dữ liệu người dùng tải lên & sao lưu (gắn volume khi chạy thật)
+RUN mkdir -p /app/uploads /app/backups && chown -R node:node /app/uploads /app/backups
+USER node
+EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s \
+  CMD node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["/sbin/tini", "--"]
+# Chạy migration + dữ liệu nền rồi mới khởi động API (idempotent, an toàn khi chạy lại)
+CMD ["sh", "-c", "npx tsx scripts/migrate.ts && npx tsx scripts/seed.ts && node dist/main.js"]

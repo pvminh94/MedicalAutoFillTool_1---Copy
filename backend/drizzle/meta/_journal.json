@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790341816277,
+      "tag": "0000_init_khoi_tao",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790346821063,
+      "tag": "0001_them_cot_tim_kiem_hsba",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790347549206,
+      "tag": "0002_them_chi_muc_buoc_cho",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790347627043,
+      "tag": "0003_them_chi_muc_truy_van_nong",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790349956113,
+      "tag": "0004_chi_muc_loc_va_sap_xep",
+      "breakpoints": true
+    }
+  ]
+}
