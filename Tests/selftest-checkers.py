@@ -89,6 +89,56 @@ expect('doc-comment nhiều dòng đúng',
        'namespace X;\nclass A {\n    /// <summary>\n    /// Dòng 1.\n    /// </summary>\n    int F() => 1;\n}\n',
        must_be_clean=True)
 
+
+# ---------------------------------------------------------------------------
+# check-usings.py — bắt CS0246 do thiếu using cho namespace KHÔNG implicit
+# ---------------------------------------------------------------------------
+usings_mod = load('usings', 'check-usings.py')
+W = usings_mod.IMPLICIT_WINFORMS
+
+import tempfile as _tf
+
+
+def _scan(text):
+    fd, path = _tf.mkstemp(suffix='.cs')
+    with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+        fh.write(text)
+    try:
+        return usings_mod.scan_file(path, W)
+    finally:
+        os.unlink(path)
+
+
+print('--- check-usings: thiếu using cho namespace không-implicit ---')
+bad = _scan('using System.Text.Json.Serialization;\nnamespace X;\nclass A { string F() => JsonSerializer.Serialize(1); }\n')
+if any(ns == 'System.Text.Json' for ns, _ in bad):
+    print("✅ bắt được thiếu 'using System.Text.Json;' (lỗi thật ở AutoFillScriptBuilder.cs)")
+else:
+    FAILS.append(f'check-usings: KHÔNG bắt được thiếu System.Text.Json ({bad})')
+    print('❌ KHÔNG bắt được thiếu System.Text.Json')
+
+ok1 = _scan('using System.Text.Json;\nnamespace X;\nclass A { string F() => JsonSerializer.Serialize(1); }\n')
+ok2 = _scan('namespace X;\nclass A { string F() => System.Text.Json.JsonSerializer.Serialize(1); }\n')
+# LƯU Ý (case này từng bị viết SAI lần thứ hai trong repo này): StringBuilder thuộc
+# System.Text — namespace KHÔNG nằm trong implicit usings, nên nếu dùng nó mà thiếu
+# 'using System.Text;' thì checker báo là ĐÚNG, không phải báo nhầm. Ở đây chỉ dùng
+# kiểu của System.Windows.Forms / System.Drawing (mới thật sự là implicit).
+ok3 = _scan('namespace X;\nclass A { void F() { MessageBox.Show(Color.Red.ToString()); var p = new Padding(3); } }\n')
+bad2 = _scan('namespace X;\nclass A { string F() { var sb = new StringBuilder(); return sb.ToString(); } }\n')
+if any(ns == 'System.Text' for ns, _ in bad2):
+    print("✅ bắt được thiếu 'using System.Text;' khi dùng StringBuilder")
+else:
+    FAILS.append(f'check-usings: KHÔNG bắt được thiếu System.Text ({bad2})')
+    print('❌ KHÔNG bắt được thiếu System.Text')
+ok4 = _scan('namespace X;\nclass A { string s = "JsonSerializer không phải code"; void F() { } }\n')
+for name, res in [('đã using đúng', ok1), ('fully-qualified', ok2),
+                  ('implicit usings (WinForms/Drawing)', ok3), ('tên nằm trong chuỗi', ok4)]:
+    if res:
+        FAILS.append(f'check-usings: báo nhầm case {name}: {res}')
+        print(f'❌ báo nhầm case {name}: {res}')
+    else:
+        print(f'✅ không báo nhầm: {name}')
+
 print()
 if FAILS:
     print(f'❌ {len(FAILS)} case tự-kiểm-chứng THẤT BẠI:')

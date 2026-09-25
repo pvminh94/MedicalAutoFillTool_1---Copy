@@ -20,6 +20,10 @@ logs/
 **/[Pp]ackages/*
 !**/[Pp]ackages/build/
 
+## Python (các script kiểm tra trong Tests/)
+__pycache__/
+*.py[cod]
+
 ## Node (test engine + bản Electron)
 node_modules/
 MedicalAutoFillApp/dist/

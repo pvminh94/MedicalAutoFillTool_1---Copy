@@ -28,6 +28,7 @@ public partial class Form1 : Form
 {
     private WebView2? _webView;
     private ToolStrip _nav = new();
+    private bool _stretching;
     private ToolStripTextBox _txtAddress = new();
     private ToolStripComboBox _cmbForm = new();
     private StatusStrip _statusStrip = new();
@@ -132,9 +133,12 @@ public partial class Form1 : Form
         var btnReload = NavButton("⟳ Tải lại", "Tải lại trang (F5) — dùng khi form không nhận dữ liệu");
         btnReload.Click += (_, _) => ReloadPage();
 
+        // LƯU Ý: ToolStripTextBox KHÔNG có thuộc tính Spring (Spring chỉ có trên
+        // ToolStripItem và bị ToolStripTextBox che đi -> CS0117 nếu đặt trong
+        // object initializer). Muốn ô địa chỉ chiếm hết khoảng trống còn lại thì
+        // phải tự tính bề rộng trong StretchAddressBox() bên dưới.
         _txtAddress = new ToolStripTextBox
         {
-            Spring = true,          // chiếm phần rộng còn lại của thanh
             Width = 300,
             BorderStyle = BorderStyle.FixedSingle,
             ForeColor = Color.White,
@@ -200,7 +204,38 @@ public partial class Form1 : Form
         _nav.Items.Add(btnSettings);
         _nav.Items.Add(btnLog);
 
+        // Ô địa chỉ tự co giãn theo bề rộng cửa sổ (thay cho Spring).
+        _nav.SizeChanged += (_, _) => StretchAddressBox();
+        _nav.Layout += (_, _) => StretchAddressBox();
+
         RefreshFormCombo();
+        StretchAddressBox();
+    }
+
+    /// <summary>
+    /// Cho ô địa chỉ chiếm phần còn lại của thanh công cụ — thay cho thuộc tính
+    /// Spring mà ToolStripTextBox không có. Có cờ chống đệ quy vì đổi Width của
+    /// một mục có thể kích hoạt lại Layout.
+    /// </summary>
+    private void StretchAddressBox()
+    {
+        if (_stretching || _nav == null || _txtAddress == null) return;
+        _stretching = true;
+        try
+        {
+            int used = 0;
+            foreach (ToolStripItem it in _nav.Items)
+            {
+                if (ReferenceEquals(it, _txtAddress)) continue;
+                used += it.Width + it.Margin.Horizontal;
+            }
+
+            int avail = _nav.ClientSize.Width - used - _nav.Padding.Horizontal - 8;
+            int want = Math.Max(110, Math.Min(avail, 900));
+            if (Math.Abs(_txtAddress.Width - want) > 2) _txtAddress.Width = want;
+        }
+        catch { /* thanh chưa dựng xong thì bỏ qua, lần Layout sau sẽ tính lại */ }
+        finally { _stretching = false; }
     }
 
     private ToolStripButton NavButton(string text, string tooltip)
@@ -292,7 +327,18 @@ public partial class Form1 : Form
             core.SourceChanged += (_, _) => UpdateAddressBar();
             core.WebMessageReceived += Core_WebMessageReceived;
             core.PermissionRequested += Core_PermissionRequested;
-            core.AcceleratorKeyPressed += Core_AcceleratorKeyPressed;
+            // AcceleratorKeyPressed là event của CoreWebView2CONTROLLER chứ không phải
+            // CoreWebView2 (gắn nhầm -> CS1061). Phải lấy thông qua control WebView2.
+            var controller = _webView?.CoreWebView2Controller;
+            if (controller != null)
+            {
+                controller.AcceleratorKeyPressed += Core_AcceleratorKeyPressed;
+            }
+            else
+            {
+                AppLogger.Warn("Không gắn được AcceleratorKeyPressed: CoreWebView2Controller chưa sẵn sàng. " +
+                               "Phím tắt Ctrl+Shift+V trong trang có thể không hoạt động — dùng nút 📋 Dán.");
+            }
             core.NewWindowRequested += Core_NewWindowRequested;
             core.ProcessFailed += Core_ProcessFailed;
             core.DocumentTitleChanged += (_, _) => UpdateAddressBar();

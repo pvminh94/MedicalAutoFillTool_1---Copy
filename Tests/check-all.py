@@ -317,6 +317,59 @@ def check_root_glob():
     return True
 
 
+# ------------------------------------------------------------------ 10. thiếu using
+def check_usings():
+    """CS0246 do thiếu `using` cho namespace KHÔNG nằm trong implicit usings.
+
+    Lỗi thật đã gặp: AutoFillScriptBuilder.cs chỉ `using System.Text.Json.Serialization;`
+    nhưng gọi `JsonSerializer.Serialize(...)` (kiểu này ở System.Text.Json) -> CS0246.
+    """
+    global CHECKS
+    CHECKS += 1
+    r = run([sys.executable, os.path.join(ROOT, 'Tests', 'check-usings.py')])
+    if r.returncode != 0:
+        bad = [ln for ln in r.stdout.splitlines() if ln.startswith('❌')]
+        fail('thiếu-using', '\n      ' + '\n      '.join(bad[:10]))
+        return False
+    n = len([ln for ln in r.stdout.splitlines() if ln.startswith('✅')])
+    print(f'  ✅ Using: {n} file WinForms/Bridge không thiếu using nào ngoài implicit')
+    return True
+
+
+# ------------------------------------------------------------------ 11. bẫy API WinForms/WebView2
+API_TRAPS = [
+    # (regex, thông báo) — mỗi mục là MỘT LỖI BIÊN DỊCH THẬT mà CI đã bắt được.
+    (r'\bcore\.AcceleratorKeyPressed\b|CoreWebView2\s*\.\s*AcceleratorKeyPressed',
+     "AcceleratorKeyPressed là event của CoreWebView2CONTROLLER, không phải CoreWebView2 (CS1061). "
+     "Dùng _webView.CoreWebView2Controller.AcceleratorKeyPressed"),
+    (r'CoreWebView2\??\s*\.\s*Dispose\s*\(',
+     "CoreWebView2 KHÔNG implement IDisposable (CS1061). Dispose chính control WebView2 là đủ."),
+    (r'new\s+ToolStripTextBox\s*\{[^}]*\bSpring\b',
+     "ToolStripTextBox không có thuộc tính Spring trong object initializer (CS0117). "
+     "Muốn ô chiếm hết chỗ trống thì tự tính Width khi thanh đổi kích thước."),
+]
+
+
+def check_api_traps():
+    """Quét các cách dùng API sai mà compiler từng báo — tránh tái phạm."""
+    global CHECKS
+    CHECKS += 1
+    hits = []
+    for f in walk(['.cs']):
+        src = open(f, encoding='utf-8-sig', errors='replace').read()
+        body = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
+        body = re.sub(r'//[^\n]*', '', body)          # bỏ comment (nơi ghi chú về chính cái bẫy)
+        for pat, msg in API_TRAPS:
+            for m in re.finditer(pat, body, re.DOTALL):
+                line = body[:m.start()].count('\n') + 1
+                hits.append(f'{rel(f)}:{line} — {msg}')
+    if hits:
+        fail('api-trap', '\n      ' + '\n      '.join(dict.fromkeys(hits)))
+        return False
+    print(f'  ✅ API: không dính {len(API_TRAPS)} bẫy WinForms/WebView2 từng gây lỗi biên dịch')
+    return True
+
+
 def main():
     print('=' * 74)
     print('KIỂM TRA TỔNG HỢP (không cần .NET SDK)')
@@ -331,6 +384,8 @@ def main():
         check_engine_api(),
         check_selftest(),
         check_root_glob(),
+        check_usings(),
+        check_api_traps(),
     ]
     print('-' * 74)
     if FAILS:
