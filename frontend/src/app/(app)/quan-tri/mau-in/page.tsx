@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/page-header';
 import { PrintDesigner } from '@/components/printing/print-designer';
 import { emptyDocument, type PrintDocument } from '@/components/printing/print-types';
+import { AdvancedFilter } from '@/components/shared/advanced-filter';
 import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
@@ -71,10 +72,15 @@ export default function PrintTemplatesPage() {
   const [duplicating, setDuplicating] = useState<PrintTemplateRow | null>(null);
   const [newCode, setNewCode] = useState('');
   const [versionsOf, setVersionsOf] = useState<PrintTemplateRow | null>(null);
+  /** Bộ lọc nâng cao dựng từ /meta/filters/print-templates */
+  const [deepFilters, setDeepFilters] = useState('');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['print-templates'],
-    queryFn: () => apiFetch<Paginated<PrintTemplateRow>>('/print/templates?pageSize=100'),
+    queryKey: ['print-templates', deepFilters],
+    queryFn: () =>
+      apiFetch<Paginated<PrintTemplateRow>>(
+        `/print/templates?pageSize=100${deepFilters ? `&filters=${encodeURIComponent(deepFilters)}` : ''}`,
+      ),
   });
 
   const versions = useQuery({
@@ -294,6 +300,13 @@ export default function PrintTemplatesPage() {
       />
 
       <Card>
+        <div className="border-b px-4 py-2.5">
+          <AdvancedFilter
+            resource="print-templates"
+            value={deepFilters}
+            onChange={setDeepFilters}
+          />
+        </div>
         {isLoading ? (
           <div className="p-4">
             <Skeleton className="h-64" />

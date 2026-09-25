@@ -80,6 +80,7 @@ export default function UtilitiesPage() {
       <CrudTable
         title="Danh mục tiện ích"
         endpoint="/utilities"
+        filterResource="utilities"
         fields={fields}
         createLabel="Thêm tiện ích"
         searchPlaceholder="Tìm theo mã, tên tiện ích…"

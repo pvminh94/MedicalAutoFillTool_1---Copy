@@ -10,6 +10,7 @@ import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { Input, Label, Select, Switch, Textarea } from '@/components/ui/input';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
+import { AdvancedFilter } from '@/components/shared/advanced-filter';
 import { cn } from '@/lib/utils';
 import type { Paginated } from '@/types/api';
 
@@ -53,6 +54,8 @@ interface CrudTableProps {
   searchPlaceholder?: string;
   /** Tham số cố định gửi kèm mọi truy vấn */
   fixedParams?: Record<string, string | number | boolean | undefined>;
+  /** Mã tài nguyên lọc nâng cao (theo /meta/filters) — có thì hiện thanh lọc tự dựng */
+  filterResource?: string;
   createLabel?: string;
   canCreate?: boolean;
   canEdit?: boolean;
@@ -81,6 +84,7 @@ export function CrudTable({
   columns,
   searchPlaceholder = 'Tìm kiếm…',
   fixedParams,
+  filterResource,
   createLabel = 'Thêm mới',
   canCreate = true,
   canEdit = true,
@@ -99,6 +103,8 @@ export function CrudTable({
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [deleting, setDeleting] = useState<Record<string, unknown> | null>(null);
+  /** Bộ lọc sâu dựng từ /meta/filters (chuỗi field:op:value) */
+  const [deepFilters, setDeepFilters] = useState('');
 
   const params = useMemo(() => {
     const p = new URLSearchParams();
@@ -108,8 +114,9 @@ export function CrudTable({
     for (const [k, v] of Object.entries(fixedParams ?? {})) {
       if (v !== undefined && v !== '') p.set(k, String(v));
     }
+    if (deepFilters) p.set('filters', deepFilters);
     return p.toString();
-  }, [page, pageSize, search, fixedParams]);
+  }, [page, pageSize, search, fixedParams, deepFilters]);
 
   const queryKey = [endpoint, params];
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -220,6 +227,19 @@ export function CrudTable({
           <div className="text-base font-semibold">{title}</div>
           {description ? <div className="text-xs text-[var(--muted-foreground)]">{description}</div> : null}
         </div>
+
+      {filterResource ? (
+        <div className="border-b px-4 py-2.5">
+          <AdvancedFilter
+            resource={filterResource}
+            value={deepFilters}
+            onChange={(next) => {
+              setDeepFilters(next);
+              setPage(1);
+            }}
+          />
+        </div>
+      ) : null}
         <div className="flex flex-wrap items-center gap-2">
           {toolbar}
           <form

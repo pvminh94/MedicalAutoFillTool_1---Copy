@@ -105,6 +105,7 @@ export default function UsersPage() {
       <CrudTable
         title="Danh sách người dùng"
         endpoint="/users"
+        filterResource="users"
         fields={fields}
         createLabel="Thêm người dùng"
         searchPlaceholder="Tìm theo tên, tài khoản, chức danh…"
