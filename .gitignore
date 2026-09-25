@@ -1,0 +1,40 @@
+## .NET Core
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+## Visual Studio
+*.userprefs
+*.[Cc]ache
+*.bak
+*.log
+*.tmp
+
+## NuGet Packages
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Web
+node_modules/
+wwwroot/lib/
+*.js.map
+*.css.map
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+
+## IIS
+publish/
+*.deploy
+
+## Environment
+appsettings.Production.json
+appsettings.Development.json.local
+*.userdist\ 
+node_modules\ 

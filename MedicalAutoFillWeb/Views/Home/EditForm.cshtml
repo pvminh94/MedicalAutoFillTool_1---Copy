@@ -1,0 +1,94 @@
+@model FormProfile
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Sửa form: " + Model.Name;
+}
+<style>
+    body { overflow: auto; padding: 20px; font-family: Arial, sans-serif; }
+    h2 { margin: 0 0 20px 0; color: #1a237e; }
+    .field-row { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+    .field-row input[type=number] { width: 70px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .field-row input[type=text] { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .field-row select { width: 90px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .field-row button { padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; }
+    .btn-remove { background: #f44336; color: #fff; }
+    .btn-add { background: #4caf50; color: #fff; }
+    .btn-save { background: #2196f3; color: #fff; padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .form-info { background: #f5f5f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #ddd; }
+    .form-info label { font-weight: bold; display: block; margin-top: 8px; }
+    .form-info input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-top: 4px; }
+    .fields-box { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 15px; }
+    .hint { color: #999; font-size: 12px; margin: 10px 0; }
+</style>
+
+<h2>✏ Sửa form: @Model.Name</h2>
+<a href="/Home/Forms" style="color:#2196f3;text-decoration:none;">← Quay lại</a>
+
+<form method="post" action="/Home/SaveForm">
+    <input type="hidden" name="Id" value="@Model.Id" />
+    
+    <div class="form-info">
+        <label>Tên form:</label>
+        <input type="text" name="Name" value="@Model.Name" required />
+        
+        <label>Chuỗi nhận diện URL:</label>
+        <input type="text" name="UrlContains" value="@Model.UrlContains" required placeholder="VD: KSKDK_Phieu_CanLamSang" />
+    </div>
+    
+    <div class="fields-box">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <strong>Ánh xạ cột Excel → Label trên web</strong>
+            <button type="button" class="btn-add" onclick="addField()">+ Thêm trường</button>
+        </div>
+        
+        <div id="fieldsContainer">
+            @if (Model.Fields != null)
+            {
+                var idx = 0;
+                foreach (var f in Model.Fields)
+                {
+                    <div class="field-row" data-index="@idx">
+                        <input type="number" name="Fields[@idx].ExcelIndex" value="@f.ExcelIndex" min="0" />
+                        <input type="text" name="Fields[@idx].Labels" value="@(string.Join(";", f.Labels))" placeholder="Label (cách nhau bằng ;)" />
+                        <select name="Fields[@idx].ControlType">
+                            <option value="text" selected="@(f.ControlType == "text")">text</option>
+                            <option value="textarea" selected="@(f.ControlType == "textarea")">textarea</option>
+                        </select>
+                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+                    </div>
+                    idx++;
+                }
+            }
+        </div>
+        
+        <div class="hint">
+            💡 Cột Excel: số thứ tự cột (bắt đầu từ 0). Label: tên hiển thị trên web, cách nhau bằng dấu ; nếu có nhiều tên.
+        </div>
+    </div>
+    
+    <div style="margin-top: 20px;">
+        <button type="submit" class="btn-save">💾 Lưu form</button>
+        <a href="/Home/Forms" style="margin-left:10px;color:#666;">Hủy</a>
+    </div>
+</form>
+
+<script>
+    var fieldIndex = @(Model.Fields?.Count ?? 0);
+    
+    function addField() {
+        var container = document.getElementById('fieldsContainer');
+        var div = document.createElement('div');
+        div.className = 'field-row';
+        div.innerHTML = `
+            <input type="number" name="Fields[${fieldIndex}].ExcelIndex" value="${fieldIndex}" min="0" />
+            <input type="text" name="Fields[${fieldIndex}].Labels" placeholder="Label (cách nhau bằng ;)" />
+            <select name="Fields[${fieldIndex}].ControlType">
+                <option value="text">text</option>
+                <option value="textarea">textarea</option>
+            </select>
+            <button type="button" class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+        `;
+        container.appendChild(div);
+        fieldIndex++;
+    }
+</script>

@@ -1,0 +1,73 @@
+/* MedicalAutoFill Tool - Custom styles */
+
+html {
+    font-size: 14px;
+    position: relative;
+    min-height: 100%;
+}
+
+@media (min-width: 768px) {
+    html {
+        font-size: 16px;
+    }
+}
+
+body {
+    margin-bottom: 60px;
+    background-color: #f8f9fa;
+}
+
+.footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    line-height: 50px;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,.08);
+    border-radius: 8px;
+}
+
+.card-header {
+    font-weight: 600;
+    background-color: #f0f4ff;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.btn {
+    border-radius: 6px;
+}
+
+.badge {
+    font-size: 0.8rem;
+    padding: 5px 10px;
+}
+
+.table th {
+    font-weight: 600;
+}
+
+code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+iframe {
+    border-radius: 4px;
+}
+
+#statusBadge {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25);
+}

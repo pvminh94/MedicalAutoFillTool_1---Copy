@@ -1,0 +1,29 @@
+{
+  "name": "medical-autofill-app",
+  "version": "1.0.0",
+  "description": "Medical Auto Fill Tool - Electron App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "npx electron-builder --win portable"
+  },
+  "author": "pvminh94",
+  "build": {
+    "appId": "com.medical.autofill",
+    "productName": "MedicalAutoFill",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": ["portable"],
+      "icon": null
+    },
+    "portable": {
+      "artifactName": "MedicalAutoFill-${version}-portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3"
+  }
+}
