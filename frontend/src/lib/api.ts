@@ -103,14 +103,17 @@ export async function apiFetch<T = unknown>(path: string, options: Options = {})
   const { body, raw, noRetry, headers, ...rest } = options;
   const access = tokenStore.access;
 
+  // FormData / tệp nhị phân (Blob, File) được gửi nguyên vẹn; còn lại gửi JSON
+  const passThrough = body instanceof FormData || (typeof Blob !== 'undefined' && body instanceof Blob);
   const response = await fetch(`${API_BASE}${path}`, {
     ...rest,
     headers: {
-      ...(body !== undefined && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+      ...(body !== undefined && !passThrough ? { 'Content-Type': 'application/json' } : {}),
+      ...(body instanceof Blob && !(body instanceof FormData) ? { 'Content-Type': 'application/octet-stream' } : {}),
       ...(access ? { Authorization: `Bearer ${access}` } : {}),
       ...(headers as Record<string, string> | undefined),
     },
-    body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+    body: body === undefined ? undefined : passThrough ? (body as BodyInit) : JSON.stringify(body),
   });
 
   if (response.status === 401 && !noRetry) {

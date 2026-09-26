@@ -8,6 +8,10 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   // Cho phép truy cập khi chạy dev sau proxy/tên miền tạm (môi trường phát triển)
   allowedDevOrigins: ['*.e2b.app', '*.e2b.dev', '*.arena.ai', 'localhost', '127.0.0.1'],
+  experimental: {
+    // Sao lưu / phục hồi CSDL lớn có thể mất vài phút — mặc định proxy chỉ chờ 30 giây
+    proxyTimeout: 15 * 60 * 1000,
+  },
   async rewrites() {
     return [
       { source: '/api/:path*', destination: `${API_PROXY_TARGET}/api/:path*` },

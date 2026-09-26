@@ -182,7 +182,10 @@ export function builtinHandlers(deps: HandlerDeps): Map<string, JobHandler> {
     const dir = config.storage.backupsDir;
     fs.mkdirSync(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `qlbs-${stamp}.json.gz`;
+    // Nhãn tuỳ chọn gắn vào tên tệp (vd "truoc-phuc-hoi", "thu-cong") — chỉ chữ thường, số, gạch ngang
+    const labelRaw = String((ctx?.payload as { label?: unknown } | undefined)?.label ?? '');
+    const label = labelRaw.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    const fileName = `qlbs-${stamp}${label ? `-${label}` : ''}.json.gz`;
     const fullPath = path.join(dir, fileName);
     const tmpPath = `${fullPath}.partial`;
     const keepRaw = Number((ctx?.payload as { keep?: unknown } | undefined)?.keep ?? 14);

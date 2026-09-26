@@ -29,6 +29,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UtilitiesModule } from './modules/utilities/utilities.module';
+import { BackupsModule } from './modules/backups/backups.module';
 
 const envFile = [
   path.resolve(process.cwd(), '.env'),
@@ -56,6 +57,7 @@ const envFile = [
     DepartmentsModule,
     SettingsModule,
     UtilitiesModule,
+    BackupsModule,
     FiltersModule,
     SchedulerModule,
     // Phân hệ nghiệp vụ

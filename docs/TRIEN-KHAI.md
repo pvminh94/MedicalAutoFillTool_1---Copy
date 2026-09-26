@@ -129,8 +129,18 @@ mặc định 23:30 hằng ngày, bấm ▶ để chạy ngay, xem kết quả �
 * Tự giữ lại `keep` bản mới nhất — sửa trong tham số tác vụ, ví dụ `{"keep": 30}` (mặc định 14).
 * Xem nhanh nội dung: `zcat data/backups/qlbs-*.json.gz | head -c 600`.
 
-> Bản JSON dùng để lưu trữ/đối chiếu và trích lại dữ liệu từng bảng. Để **phục hồi toàn bộ**
-> hệ thống nhanh nhất vẫn nên dùng `pg_dump`/`pg_restore` ở trên — nên đặt cả hai.
+**Phục hồi trên giao diện** — *Quản trị → Sao lưu & phục hồi* (quyền `backup.view`,
+`backup.create`, `backup.restore`):
+
+* **Sao lưu ngay**, **Tải về** máy (nên tải về định kỳ, cất ngoài máy chủ), **Tải lên** một
+  tệp `.json.gz` đã tải về trước đó, xem **chi tiết** số dòng từng bảng, **xoá** tệp.
+* **Phục hồi**: gõ `PHUC HOI` để xác nhận. Hệ thống tự tạo bản an toàn
+  `qlbs-…-truoc-phuc-hoi.json.gz` rồi thay toàn bộ dữ liệu trong **một giao dịch** —
+  lỗi bất kỳ (kể cả dữ liệu vi phạm khoá ngoại) thì huỷ hết, dữ liệu hiện tại giữ nguyên.
+  Phiên đăng nhập được giữ; bảng `_qlbs_migrations` không bị ghi đè.
+* Bản định dạng cũ (JSON không nén, chỉ 17 bảng danh mục) bị chặn phục hồi vì sẽ làm mất dữ liệu.
+
+> Với CSDL rất lớn (hàng GB), `pg_dump`/`pg_restore` ở trên vẫn nhanh và chắc hơn — nên đặt cả hai.
 
 Nên đặt lịch sao lưu tự động (ví dụ cron hằng ngày 0h) và giữ tối thiểu 7 bản gần nhất.
 

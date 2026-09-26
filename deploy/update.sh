@@ -3,7 +3,7 @@
 #  QLBS — Cập nhật nhanh sau khi có code mới (chỉ dựng lại phần thay đổi)
 # ==============================================================================
 #
-#      cd /opt/qlbs && sudo bash deploy/update.sh
+#      cd /opt/qlbs && sudo bash deploy/update.sh      (tự git pull — không cần pull trước)
 #
 #  Cách hoạt động:
 #    1. git pull nhánh hiện tại.
@@ -72,17 +72,32 @@ fi
 NEW=$(git rev-parse HEAD)
 
 if [[ "$OLD" == "$NEW" ]]; then
-  ok "Không có commit mới ($(git log -1 --format='%h %s'))"
-  CHANGED=""
+  ok "Không có commit mới từ git pull ($(git log -1 --format='%h %s'))"
 else
   ok "$(git rev-list --count "$OLD..$NEW") commit mới: ${OLD:0:7} → ${NEW:0:7}"
   git --no-pager log --format='    %h %s' "$OLD..$NEW" | head -20
-  CHANGED=$(git diff --name-only "$OLD" "$NEW")
 fi
 
+# So với commit ĐANG CHẠY của từng service (lưu ở data/.deployed-<svc>), không phải
+# commit trước lần pull này — nếu đã tự `git pull` trước khi chạy script, hoặc lần
+# dựng trước thất bại, thì vẫn biết cần dựng lại.
+STATE_DIR="$ROOT/data"; mkdir -p "$STATE_DIR"
+needs_build() { # needs_build <svc> <thư-mục>
+  local f="$STATE_DIR/.deployed-$1" dep
+  [[ -s "$f" ]] || { warn "$1: chưa rõ bản đang chạy → dựng lại"; return 0; }
+  dep=$(cat "$f")
+  git cat-file -e "$dep^{commit}" 2>/dev/null || { warn "$1: không tìm thấy commit $dep → dựng lại"; return 0; }
+  [[ "$dep" == "$NEW" ]] && return 1
+  git diff --quiet "$dep" "$NEW" -- "$2" "$3" 2>/dev/null && return 1
+  ok "$1: có thay đổi từ ${dep:0:7} → ${NEW:0:7}"
+  return 0
+}
+
 BUILD=()
-if [[ $FORCE_API -eq 1 ]] || grep -q '^backend/' <<<"$CHANGED"; then BUILD+=(api); fi
-if [[ $FORCE_WEB -eq 1 ]] || grep -q '^frontend/' <<<"$CHANGED"; then BUILD+=(web); fi
+if [[ $FORCE_API -eq 1 ]] || needs_build api backend/ docker-compose.yml; then BUILD+=(api); fi
+if [[ $FORCE_WEB -eq 1 ]] || needs_build web frontend/ docker-compose.yml; then BUILD+=(web); fi
+DEPLOYED_BEFORE=$(cat "$STATE_DIR/.deployed-api" 2>/dev/null || echo "$OLD")
+CHANGED=$(git diff --name-only "$DEPLOYED_BEFORE" "$NEW" 2>/dev/null || true)
 COMPOSE_CHANGED=0
 grep -qE '^(docker-compose\.yml|\.env\.example)$' <<<"$CHANGED" && COMPOSE_CHANGED=1
 
@@ -116,6 +131,7 @@ if [[ ${#BUILD[@]} -gt 0 ]]; then
   done
   step "Khởi động lại: ${BUILD[*]}"
   "${DC[@]}" up -d --no-deps "${BUILD[@]}"
+  for svc in "${BUILD[@]}"; do echo "$NEW" > "$STATE_DIR/.deployed-$svc"; done
 fi
 if [[ $COMPOSE_CHANGED -eq 1 ]]; then
   step "docker-compose.yml thay đổi — áp dụng cấu hình mới"

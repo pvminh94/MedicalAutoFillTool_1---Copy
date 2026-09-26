@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Users,
+  DatabaseBackup,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -66,6 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/quan-tri/mau-in', label: 'Thiết kế bản in', icon: Printer, permission: 'print.template.view' },
       { href: '/quan-tri/tien-ich', label: 'Tiện ích', icon: SlidersHorizontal, permission: 'utility.view' },
       { href: '/quan-tri/tac-vu', label: 'Tác vụ định kỳ', icon: CalendarClock, permission: 'job.view' },
+      { href: '/quan-tri/sao-luu', label: 'Sao lưu & phục hồi', icon: DatabaseBackup, permission: 'backup.view' },
       { href: '/quan-tri/cau-hinh', label: 'Cấu hình hệ thống', icon: Settings2, permission: 'setting.view' },
       { href: '/quan-tri/nhat-ky', label: 'Nhật ký kiểm toán', icon: History, permission: 'audit.log.view' },
     ],
