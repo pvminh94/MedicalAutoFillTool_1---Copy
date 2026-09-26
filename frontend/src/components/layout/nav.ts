@@ -16,15 +16,25 @@ import {
   SlidersHorizontal,
   Users,
   DatabaseBackup,
+  FolderTree,
+  BadgeCheck,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
-  href: string;
+  /** Đường dẫn — mục cha có `children` thì không cần */
+  href?: string;
   label: string;
   icon: LucideIcon;
   /** Quyền tối thiểu để hiện mục này (bỏ trống = ai cũng thấy) */
   permission?: string;
+  /** Menu con (thu gọn/mở rộng được). Mục cha tự ẩn khi không có quyền xem mục con nào. */
+  children?: NavItem[];
+}
+
+/** Toàn bộ đường dẫn của menu (kể cả menu con) */
+export function navHrefs(items: NavItem[]): string[] {
+  return items.flatMap((i) => [...(i.href ? [i.href] : []), ...navHrefs(i.children ?? [])]);
 }
 
 export interface NavGroup {
@@ -61,7 +71,14 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Quản trị hệ thống',
     items: [
-      { href: '/quan-tri/khoa-phong', label: 'Khoa phòng', icon: Building2, permission: 'department.view' },
+      {
+        label: 'Danh mục',
+        icon: FolderTree,
+        children: [
+          { href: '/quan-tri/khoa-phong', label: 'Khoa phòng', icon: Building2, permission: 'department.view' },
+          { href: '/quan-tri/chuc-danh', label: 'Chức danh', icon: BadgeCheck, permission: 'job_title.view' },
+        ],
+      },
       { href: '/quan-tri/nguoi-dung', label: 'Người dùng', icon: Users, permission: 'user.view' },
       { href: '/quan-tri/vai-tro', label: 'Vai trò & quyền', icon: ShieldCheck, permission: 'role.view' },
       { href: '/quan-tri/mau-in', label: 'Thiết kế bản in', icon: Printer, permission: 'print.template.view' },

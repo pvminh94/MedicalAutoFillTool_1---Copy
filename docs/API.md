@@ -182,7 +182,12 @@ Tổng **126** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 | `POST` | `/users/:id/unlock` | Mở khoá tài khoản bị tạm khoá | `user.update` |
 | `PUT` | `/users/:id/roles` | Gán vai trò cho người dùng | `user.assign-role` |
 | `PUT` | `/users/:id/department-scopes` | Gán phạm vi khoa được phép truy cập | `user.assign-role` |
-| `POST` | `/users/import` | Nhập danh sách người dùng từ Excel/JSON | `user.import` |
+| `GET` | `/users/import/template` | Tải tệp Excel mẫu nhập nhân viên | `user.import` |
+| `POST` | `/users/import/file?name=&dryRun=&overwrite=&addTitles=` | Nhập nhân viên từ tệp .xlsx/.csv/.txt (thân yêu cầu là nội dung tệp, `application/octet-stream`); `dryRun=true` để xem trước | `user.import` |
+| `POST` | `/users/import` | Nhập danh sách người dùng từ JSON (dòng đã đọc sẵn) | `user.import` |
+| `GET` | `/job-titles` | Danh mục chức danh (tìm kiếm, phân trang) | `job_title.view` |
+| `GET` | `/job-titles/options` | Danh sách gọn cho ô chọn | (đăng nhập) |
+| `POST` / `PUT` / `DELETE` | `/job-titles[/:id]` | Thêm / sửa (đổi tên cập nhật `users.title`) / xoá (chặn khi đang dùng) | `job_title.create/update/delete` |
 
 ## Tiện ích (menu động)
 

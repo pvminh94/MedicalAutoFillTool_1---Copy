@@ -42,6 +42,12 @@ export const PERMISSIONS: PermissionSeed[] = [
   P('department', 'update', 'Sửa đơn vị / khoa phòng'),
   P('department', 'delete', 'Xoá đơn vị / khoa phòng'),
 
+  // Danh mục chức danh
+  P('job_title', 'view', 'Xem danh mục chức danh'),
+  P('job_title', 'create', 'Thêm chức danh'),
+  P('job_title', 'update', 'Sửa chức danh'),
+  P('job_title', 'delete', 'Xoá chức danh'),
+
   // Người dùng
   P('user', 'view', 'Xem danh sách người dùng'),
   P('user', 'create', 'Thêm người dùng'),
@@ -726,3 +732,14 @@ export const DEMO_REPORT_TEMPLATE = {
     },
   ],
 };
+
+/** Chức danh mặc định — chỉ thêm khi danh mục còn trống (quản trị sửa/xoá tự do) */
+export const DEFAULT_JOB_TITLES: { code: string; name: string }[] = [
+  { code: 'BS', name: 'Bác sĩ' },
+  { code: 'DD', name: 'Điều dưỡng' },
+  { code: 'KTV', name: 'Kỹ thuật viên' },
+  { code: 'DS', name: 'Dược sĩ' },
+  { code: 'HS', name: 'Hộ sinh' },
+  { code: 'KT', name: 'Kế toán' },
+  { code: 'NV', name: 'Nhân viên' },
+];

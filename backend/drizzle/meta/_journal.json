@@ -36,6 +36,13 @@
       "when": 1790349956113,
       "tag": "0004_chi_muc_loc_va_sap_xep",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0005_them_danh_muc_chuc_danh",
+      "breakpoints": true
     }
   ]
 }

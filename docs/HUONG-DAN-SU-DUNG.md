@@ -88,9 +88,11 @@ danh sách khoa chưa nhập số liệu trong kỳ.
 
 | Việc | Đường dẫn |
 |---|---|
-| Người dùng: thêm, sửa, gán vai trò, đặt lại mật khẩu, khoá tài khoản | **Quản trị → Người dùng** |
+| Người dùng: thêm, sửa, gán vai trò, đặt lại mật khẩu, khoá tài khoản (thư điện tử, điện thoại, ghi chú không bắt buộc) | **Quản trị → Người dùng** |
+| Nhập danh sách nhân viên từ Excel (.xlsx) / CSV / TXT: tải tệp mẫu → chọn tệp → xem trước từng dòng → xác nhận | **Quản trị → Người dùng → Nhập từ Excel/CSV** |
 | Vai trò & quyền: tạo vai trò, tích chọn từng quyền, đặt phạm vi dữ liệu | **Quản trị → Vai trò** |
-| Cây khoa phòng: thêm/sửa/xoá nhiều cấp, bật nhập báo cáo, gán mẫu báo cáo | **Quản trị → Khoa phòng** |
+| Cây khoa phòng: thêm/sửa/xoá nhiều cấp, bật nhập báo cáo, gán mẫu báo cáo | **Quản trị → Danh mục → Khoa phòng** |
+| Chức danh (Bác sĩ, Điều dưỡng…): dùng cho ô chọn chức danh; đổi tên sẽ cập nhật cho mọi người đang mang chức danh đó | **Quản trị → Danh mục → Chức danh** |
 | Quy trình ký phiếu HSBA: số bước, loại người ký, cho trả lại, bắt buộc ý kiến | **Hồ sơ bệnh án → Quy trình ký** |
 | Mẫu báo cáo: mục, nhóm, dòng, cột nhập/công thức, chỉ tiêu tổng hợp | **Báo cáo → Mẫu báo cáo** |
 | Mẫu in: khổ giấy, lề, font, ảnh, chữ ký, phiên bản đang ban hành | **Quản trị → Mẫu in** |
@@ -98,6 +100,14 @@ danh sách khoa chưa nhập số liệu trong kỳ.
 | Tác vụ định kỳ: cron, chạy tay, xem lịch sử chạy | **Quản trị → Tác vụ** |
 | Cấu hình: thông tin bệnh viện, tuỳ chọn hệ thống, khôi phục mặc định | **Quản trị → Cấu hình** |
 | Nhật ký toàn hệ thống (lọc theo người dùng, phân hệ, thao tác, thời gian) | **Quản trị → Nhật ký** |
+
+### Nhập danh sách nhân viên
+
+- Chỉ bắt buộc cột **Họ và tên**. Các cột khác (Tên đăng nhập, Chức danh, Mã khoa hoặc tên khoa, Thư điện tử, Điện thoại, Vai trò, Ghi chú, Mật khẩu, Mã nhân viên) có thể có hoặc không, thứ tự tuỳ ý, tên cột không phân biệt dấu/hoa thường.
+- Tên đăng nhập để trống → tự tạo từ họ tên: “Nguyễn Văn An” → `annv` (trùng thì `annv2`…). Nhập lại cùng tệp không tạo trùng.
+- Thư điện tử/điện thoại sai định dạng chỉ bị bỏ qua (cảnh báo), khoa không tìm thấy thì để trống khoa.
+- Tài khoản mới dùng mật khẩu `Qlbs@123456`, bắt buộc đổi khi đăng nhập lần đầu. Chọn “Ghi đè” để cập nhật tài khoản đã có (không đổi mật khẩu, ô trống không xoá dữ liệu cũ).
+- Tệp CSV/TXT: UTF-8, UTF-16 (Excel “Unicode Text”) hoặc Windows-1258; phân cách bằng `,` `;` Tab hoặc `|`. Tệp `.xls` cũ cần lưu lại thành `.xlsx`. Tối đa 5000 dòng / 10 MB mỗi lần.
 
 ## 8. Câu hỏi thường gặp
 

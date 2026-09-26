@@ -11,8 +11,26 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { AdvancedQueryDto, toBoolean } from '../../../common/dto/query.dto';
+
+/**
+ * Ô để trống trên form gửi lên chuỗi rỗng "" — coi như KHÔNG nhập (IsOptional chỉ bỏ qua
+ * null/undefined, nên trước đây "" bị IsEmail/MinLength báo lỗi và không lưu được).
+ */
+const emptyToUndefined = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const v = value.trim();
+  return v === '' ? undefined : v;
+};
+/** Ô chọn khoa để trống → bỏ khoa (null) */
+const emptyToNull = ({ value }: { value: unknown }) =>
+  value === '' || value === 0 || value === '0' || (typeof value === 'number' && Number.isNaN(value)) ? null : value;
+/** Cắt khoảng trắng; giữ nguyên "" để khi sửa có thể xoá giá trị cũ */
+const trimString = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+/** Chỉ kiểm tra định dạng khi có nhập */
+const hasValue = (v: unknown) => v !== undefined && v !== null && v !== '';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'bs.nguyenvan.a' })
@@ -29,29 +47,34 @@ export class CreateUserDto {
   fullName!: string;
 
   @ApiPropertyOptional({ description: 'Mật khẩu (bỏ trống sẽ dùng mật khẩu mặc định)' })
+  @Transform(emptyToUndefined)
   @IsOptional()
   @IsString()
   @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự' })
   password?: string;
 
   @ApiPropertyOptional({ example: 'Bác sĩ' })
+  @Transform(trimString)
   @IsOptional()
   @IsString()
   @MaxLength(64)
   title?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @ApiPropertyOptional({ description: 'Không bắt buộc' })
+  @Transform(trimString)
+  @ValidateIf((o: { email?: unknown }) => hasValue(o.email))
+  @IsEmail({}, { message: 'Thư điện tử không hợp lệ (ví dụ đúng: ten@benhvien.vn) — có thể để trống' })
   email?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Không bắt buộc' })
+  @Transform(trimString)
   @IsOptional()
   @IsString()
-  @MaxLength(32)
+  @MaxLength(32, { message: 'Số điện thoại tối đa 32 ký tự' })
   phone?: string;
 
   @ApiPropertyOptional({ description: 'Khoa công tác chính' })
+  @Transform(emptyToNull)
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -75,7 +98,7 @@ export class CreateUserDto {
   @IsBoolean()
   mustChangePassword?: boolean;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Không bắt buộc' })
   @IsOptional()
   @IsString()
   note?: string;
@@ -158,4 +181,10 @@ export class ImportUsersDto {
   @Transform(toBoolean)
   @IsBoolean()
   dryRun?: boolean;
+
+  @ApiPropertyOptional({ description: 'Tự thêm chức danh chưa có vào danh mục' })
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  addTitles?: boolean;
 }

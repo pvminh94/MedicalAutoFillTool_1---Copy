@@ -14,6 +14,10 @@ không có phần nào bị cứng trong mã nguồn.
 | `department.create` | Thêm đơn vị / khoa phòng |
 | `department.update` | Sửa đơn vị / khoa phòng |
 | `department.delete` | Xoá đơn vị / khoa phòng |
+| `job_title.view` | Xem danh mục chức danh |
+| `job_title.create` | Thêm chức danh |
+| `job_title.update` | Sửa chức danh |
+| `job_title.delete` | Xoá chức danh |
 | `user.view` | Xem danh sách người dùng |
 | `user.create` | Thêm người dùng |
 | `user.update` | Sửa người dùng |

@@ -9,7 +9,11 @@ import {
   Post,
   Put,
   Query,
+  Req,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Audit, CurrentUser, RequirePermissions } from '../../common/decorators';
 import type { AccessContext } from '../../common/types/access-context';
@@ -22,13 +26,17 @@ import {
   UpdateUserDto,
   UserQueryDto,
 } from './dto/user.dto';
+import { UserImportService } from './user-import.service';
 import { UsersService } from './users.service';
 
 @ApiTags('Người dùng')
 @ApiBearerAuth()
 @Controller('users')
 export class UsersController {
-  constructor(private readonly service: UsersService) {}
+  constructor(
+    private readonly service: UsersService,
+    private readonly importer: UserImportService,
+  ) {}
 
   @Get()
   @RequirePermissions('user.view')
@@ -120,10 +128,46 @@ export class UsersController {
     return this.service.setDepartmentScopes(id, dto);
   }
 
+  @Get('import/template')
+  @RequirePermissions('user.import')
+  @ApiOperation({ summary: 'Tải tệp Excel mẫu để nhập danh sách nhân viên' })
+  async importTemplate(@Res({ passthrough: true }) res: Response) {
+    const buf = await this.importer.template();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="mau-nhap-nhan-vien.xlsx"`,
+    });
+    return new StreamableFile(buf);
+  }
+
+  /**
+   * Nhập nhân viên từ tệp .xlsx/.csv/.txt — gửi nội dung tệp thô
+   * (Content-Type: application/octet-stream), tên tệp ở ?name=
+   */
+  @Post('import/file')
+  @RequirePermissions('user.import')
+  @ApiOperation({ summary: 'Nhập danh sách nhân viên từ tệp Excel/CSV/TXT (dryRun=true để xem trước)' })
+  async importFile(
+    @Req() req: Request,
+    @Query('name') name: string,
+    @Query('dryRun') dryRun: string,
+    @Query('overwrite') overwrite: string,
+    @Query('addTitles') addTitles: string,
+    @CurrentUser() actor: AccessContext,
+  ) {
+    const buf = await this.importer.readUpload(req);
+    return this.importer.importFile(
+      buf,
+      String(name ?? ''),
+      { dryRun: dryRun === 'true', overwrite: overwrite === 'true', addTitles: addTitles === 'true' },
+      actor,
+    );
+  }
+
   @Post('import')
   @RequirePermissions('user.import')
-  @ApiOperation({ summary: 'Nhập danh sách người dùng từ Excel/JSON' })
+  @ApiOperation({ summary: 'Nhập danh sách người dùng từ JSON (các dòng đã đọc sẵn)' })
   importUsers(@Body() dto: ImportUsersDto, @CurrentUser() actor: AccessContext) {
-    return this.service.importUsers(dto, actor);
+    return this.importer.importJson(dto.rows, { dryRun: dto.dryRun, overwrite: dto.overwrite, addTitles: dto.addTitles }, actor);
   }
 }

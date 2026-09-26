@@ -418,6 +418,13 @@ export function CrudTable({
                     }}
                   >
                     <option value="">— Chọn —</option>
+                    {form[f.name] !== undefined &&
+                    form[f.name] !== null &&
+                    form[f.name] !== '' &&
+                    !f.options?.some((o) => String(o.value) === String(form[f.name])) ? (
+                      // Giá trị cũ không còn trong danh sách (vd. chức danh chưa khai báo) — giữ nguyên, không mất dữ liệu
+                      <option value={String(form[f.name])}>{String(form[f.name])} (ngoài danh mục)</option>
+                    ) : null}
                     {f.options?.map((o) => (
                       <option key={String(o.value)} value={String(o.value)}>
                         {o.label}

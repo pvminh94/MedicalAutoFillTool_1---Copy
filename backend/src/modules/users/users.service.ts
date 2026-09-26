@@ -26,7 +26,6 @@ import { AuthService } from '../auth/auth.service';
 import { AuditService } from '../audit/audit.service';
 import type {
   CreateUserDto,
-  ImportUsersDto,
   ResetPasswordDto,
   SetDepartmentScopesDto,
   SetRolesDto,
@@ -442,119 +441,5 @@ export class UsersService {
       neverLoggedIn: neverLoggedIn?.total ?? 0,
       byDepartment,
     };
-  }
-
-  /** Nhập danh sách người dùng từ Excel/JSON */
-  async importUsers(dto: ImportUsersDto, actor?: AccessContext) {
-    const results = { created: 0, updated: 0, skipped: 0, errors: [] as { row: number; message: string }[] };
-    const roleCache = new Map<string, number>();
-
-    for (let i = 0; i < dto.rows.length; i++) {
-      const row = dto.rows[i];
-      const username = String(row['username'] ?? row['Tên đăng nhập'] ?? '').trim().toLowerCase();
-      const fullName = String(row['fullName'] ?? row['Họ tên'] ?? row['Họ và tên'] ?? '').trim();
-      if (!username || !fullName) {
-        results.errors.push({ row: i + 2, message: 'Thiếu tên đăng nhập hoặc họ tên' });
-        results.skipped++;
-        continue;
-      }
-      try {
-        const [existing] = await this.db.db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.username, username))
-          .limit(1);
-
-        const title = String(row['title'] ?? row['Chức danh'] ?? '').trim();
-        const phone = String(row['phone'] ?? row['Điện thoại'] ?? '').trim();
-        const email = String(row['email'] ?? row['Email'] ?? '').trim();
-        const deptCode = String(row['departmentCode'] ?? row['Mã khoa'] ?? row['Khoa'] ?? '').trim();
-        let departmentId: number | null = null;
-        if (deptCode) {
-          const [dept] = await this.db.db
-            .select({ id: departments.id })
-            .from(departments)
-            .where(or(eq(departments.code, deptCode), eq(departments.name, deptCode)))
-            .limit(1);
-          departmentId = dept?.id ?? null;
-          if (!dept) results.errors.push({ row: i + 2, message: `Không tìm thấy khoa "${deptCode}"` });
-        }
-
-        if (dto.dryRun) {
-          results.created++;
-          continue;
-        }
-
-        let userId: number;
-        if (existing) {
-          if (!dto.overwrite) {
-            results.skipped++;
-            continue;
-          }
-          await this.db.db
-            .update(users)
-            .set({ fullName, title, phone, email, departmentId, updatedAt: new Date() })
-            .where(eq(users.id, existing.id));
-          userId = existing.id;
-          results.updated++;
-        } else {
-          const password = String(row['password'] ?? '').trim() || DEFAULT_RESET_PASSWORD;
-          const [created] = await this.db.db
-            .insert(users)
-            .values({
-              username,
-              passwordHash: await this.auth.hashPassword(password),
-              fullName,
-              title,
-              phone,
-              email,
-              departmentId,
-              mustChangePassword: true,
-            })
-            .returning();
-          userId = created.id;
-          results.created++;
-        }
-
-        const roleCodesRaw = String(row['roles'] ?? row['Vai trò'] ?? '').trim();
-        if (roleCodesRaw) {
-          const codes = roleCodesRaw.split(/[,;|]/).map((s) => s.trim().toUpperCase()).filter(Boolean);
-          const ids: number[] = [];
-          for (const code of codes) {
-            if (roleCache.has(code)) {
-              ids.push(roleCache.get(code)!);
-              continue;
-            }
-            const [r] = await this.db.db.select({ id: roles.id }).from(roles).where(eq(roles.code, code)).limit(1);
-            if (r) {
-              roleCache.set(code, r.id);
-              ids.push(r.id);
-            } else {
-              results.errors.push({ row: i + 2, message: `Vai trò "${code}" không tồn tại` });
-            }
-          }
-          if (ids.length > 0) {
-            await this.db.db
-              .insert(userRoles)
-              .values(ids.map((roleId) => ({ userId, roleId })))
-              .onConflictDoNothing();
-          }
-        }
-        await this.auth.invalidateUserCache(userId);
-      } catch (err) {
-        results.errors.push({ row: i + 2, message: (err as Error).message });
-      }
-    }
-
-    await this.audit.log({
-      userId: actor?.id ?? null,
-      username: actor?.username ?? '',
-      action: 'IMPORT',
-      module: 'ADMIN',
-      entity: 'user',
-      description: `Nhập ${dto.rows.length} người dùng: ${results.created} mới, ${results.updated} cập nhật, ${results.skipped} bỏ qua, ${results.errors.length} lỗi`,
-    });
-
-    return results;
   }
 }

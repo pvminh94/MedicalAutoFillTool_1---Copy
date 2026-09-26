@@ -1,11 +1,12 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Lock, LockOpen, ShieldCheck, UserPlus } from 'lucide-react';
+import { FileUp, KeyRound, Lock, LockOpen, ShieldCheck, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CrudTable, type CrudField } from '@/components/shared/crud-table';
 import { PageHeader } from '@/components/shared/page-header';
+import { UserImportDialog } from '@/components/users/user-import-dialog';
 import { Badge } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
@@ -63,6 +64,7 @@ export default function UsersPage() {
   const [resetTarget, setResetTarget] = useState<Record<string, unknown> | null>(null);
   const [unlockTarget, setUnlockTarget] = useState<Record<string, unknown> | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: roles } = useQuery({
     queryKey: ['roles-all'],
@@ -74,17 +76,31 @@ export default function UsersPage() {
     queryFn: () => apiFetch<DeptOption[]>('/departments/options'),
   });
 
+  const { data: jobTitles } = useQuery({
+    queryKey: ['job-titles-options'],
+    queryFn: () => apiFetch<{ id: number; code: string; name: string }[]>('/job-titles/options'),
+    // Luôn lấy mới khi mở trang — danh mục có thể vừa được sửa ở trang Chức danh
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
   const fields: CrudField[] = [
     { name: 'username', label: 'Tên đăng nhập', required: true, createOnly: true, placeholder: 'bs.nguyenvana' },
     { name: 'fullName', label: 'Họ và tên', required: true, placeholder: 'Nguyễn Văn A' },
-    { name: 'title', label: 'Chức danh', placeholder: 'Bác sĩ / Điều dưỡng / Kế toán' },
+    {
+      name: 'title',
+      label: 'Chức danh',
+      type: 'select',
+      options: (jobTitles ?? []).map((t) => ({ value: t.name, label: t.name })),
+      help: 'Không bắt buộc · thêm chức danh ở Quản trị → Danh mục → Chức danh',
+    },
     { name: 'departmentId', label: 'Khoa công tác', type: 'select', options: (departments ?? []).map((d) => ({ value: d.id, label: `${'— '.repeat(Math.max(0, d.level - 1))}${d.name}` })) },
-    { name: 'email', label: 'Thư điện tử', type: 'email' },
-    { name: 'phone', label: 'Điện thoại' },
+    { name: 'email', label: 'Thư điện tử', type: 'email', placeholder: 'Không bắt buộc' },
+    { name: 'phone', label: 'Điện thoại', placeholder: 'Không bắt buộc' },
     { name: 'password', label: 'Mật khẩu ban đầu', type: 'password', createOnly: true, hideInTable: true, help: 'Bỏ trống để dùng mật khẩu mặc định Qlbs@123456' },
     { name: 'mustChangePassword', label: 'Buộc đổi mật khẩu lần đầu', type: 'switch', defaultValue: true, hideInTable: true },
     { name: 'active', label: 'Đang làm việc', type: 'switch', defaultValue: true },
-    { name: 'note', label: 'Ghi chú', type: 'textarea', hideInTable: true },
+    { name: 'note', label: 'Ghi chú', type: 'textarea', hideInTable: true, placeholder: 'Không bắt buộc' },
   ];
 
   const setRoles = useMutation({
@@ -139,9 +155,16 @@ export default function UsersPage() {
         labelKey="fullName"
         pageSize={20}
         toolbar={
-          <Badge tone="info">
-            <UserPlus className="mr-1 size-3" /> {roles?.length ?? 0} vai trò sẵn có
-          </Badge>
+          <>
+            {can('user.import') ? (
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <FileUp /> Nhập từ Excel/CSV
+              </Button>
+            ) : null}
+            <Badge tone="info">
+              <UserPlus className="mr-1 size-3" /> {roles?.length ?? 0} vai trò sẵn có
+            </Badge>
+          </>
         }
         columns={[
           { key: 'username', label: 'Tài khoản' },
@@ -303,6 +326,7 @@ export default function UsersPage() {
           ngay sau khi đăng nhập.
         </p>
       </Dialog>
+      <UserImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </>
   );
 }

@@ -61,3 +61,26 @@ export const departments = pgTable(
 
 export type Department = typeof departments.$inferSelect;
 export type NewDepartment = typeof departments.$inferInsert;
+
+/**
+ * Danh mục chức danh (Bác sĩ, Điều dưỡng, Kế toán…) — khai báo từ giao diện.
+ * Người dùng lưu tên chức danh ở cột users.title (chọn từ danh mục này).
+ */
+export const jobTitles = pgTable(
+  'job_titles',
+  {
+    id: serial('id').primaryKey(),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    active: boolean('active').default(true).notNull(),
+    note: text('note').default('').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('job_titles_code_uq').on(t.code),
+    uniqueIndex('job_titles_name_uq').on(sql`lower(${t.name})`),
+    index('job_titles_sort_idx').on(t.sortOrder, t.name),
+  ],
+);

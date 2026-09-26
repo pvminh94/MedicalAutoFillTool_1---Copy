@@ -20,6 +20,7 @@ import * as schema from '../src/db/schema';
 import {
   DEMO_DEPARTMENTS,
   DEMO_REPORT_TEMPLATE,
+  DEFAULT_JOB_TITLES,
   DEFAULT_WORKFLOW,
   PERMISSIONS,
   ROLES,
@@ -231,6 +232,20 @@ async function seedDepartments(): Promise<void> {
     log(`+ ${dept.code} — ${dept.name}`);
   }
   log(`Tổng ${codeToId.size} đơn vị`);
+}
+
+async function seedJobTitles(): Promise<void> {
+  title('Danh mục chức danh');
+  const [row] = await db.select({ total: sql<number>`count(*)::int` }).from(schema.jobTitles);
+  if ((row?.total ?? 0) > 0) {
+    log(`Đã có ${row!.total} chức danh — bỏ qua`);
+    return;
+  }
+  await db
+    .insert(schema.jobTitles)
+    .values(DEFAULT_JOB_TITLES.map((t, i) => ({ code: t.code, name: t.name, sortOrder: i + 1 })))
+    .onConflictDoNothing();
+  log(`+ ${DEFAULT_JOB_TITLES.length} chức danh mặc định`);
 }
 
 async function seedWorkflow(): Promise<void> {
@@ -481,6 +496,7 @@ async function main(): Promise<void> {
     await seedDepartments();
     await seedReportTemplates();
   }
+  await seedJobTitles();
   await seedWorkflow();
   await seedUtilities();
   await seedJobs();

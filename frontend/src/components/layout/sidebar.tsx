@@ -1,10 +1,11 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Blocks, Hospital, Sparkles, X } from 'lucide-react';
-import { NAV_GROUPS } from './nav';
+import { Blocks, ChevronRight, Hospital, Sparkles, X } from 'lucide-react';
+import { NAV_GROUPS, navHrefs, type NavItem } from './nav';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,23 @@ interface UtilityMenuItem {
   placement?: string;
 }
 
+const OPEN_KEY = 'qlbs.sidebar.open';
+
+function isActive(pathname: string, href?: string): boolean {
+  if (!href) return false;
+  return (
+    pathname === href || (href !== '/dashboard' && pathname.startsWith(href) && href.split('/').length > 2)
+  );
+}
+
+const linkClass = (active: boolean) =>
+  cn(
+    'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
+    active
+      ? 'bg-[var(--accent)] font-semibold text-[var(--accent-foreground)]'
+      : 'text-[var(--foreground)] hover:bg-[var(--muted)]',
+  );
+
 /** Menu dọc: tự ẩn mục không đủ quyền, tự thu gọn trên màn hình nhỏ. */
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -34,7 +52,38 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     staleTime: 120_000,
   });
 
-  const staticHrefs = new Set(NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href)));
+  const staticHrefs = new Set(NAV_GROUPS.flatMap((g) => navHrefs(g.items)));
+
+  // Mục cha đang mở — nhớ giữa các lần tải trang; tự mở khi đang ở trang con
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    try {
+      setOpen(JSON.parse(localStorage.getItem(OPEN_KEY) ?? '{}') as Record<string, boolean>);
+    } catch {
+      /* bỏ qua */
+    }
+  }, []);
+  const toggle = (label: string, value: boolean) =>
+    setOpen((prev) => {
+      const next = { ...prev, [label]: value };
+      try {
+        localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+      } catch {
+        /* bỏ qua */
+      }
+      return next;
+    });
+
+  /** Lọc theo quyền; mục cha chỉ hiện khi còn ít nhất 1 mục con */
+  const visible = (items: NavItem[]): NavItem[] =>
+    items.flatMap((item) => {
+      if (item.permission && !can(item.permission)) return [];
+      if (item.children) {
+        const children = visible(item.children);
+        return children.length ? [{ ...item, children }] : [];
+      }
+      return [item];
+    });
   const extraUtilities = (utilities ?? []).filter(
     (u) => u.route && !staticHrefs.has(u.route) && !(u.kind === 'BUILTIN' && staticHrefs.has(u.route)),
   );
@@ -60,7 +109,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="thin-scroll flex-1 space-y-4 overflow-y-auto px-3 py-4">
         {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => !item.permission || can(item.permission));
+          const items = visible(group.items);
           if (items.length === 0) return null;
           return (
             <div key={group.label} className="space-y-1">
@@ -68,21 +117,54 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 {group.label}
               </div>
               {items.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  (item.href !== '/dashboard' && pathname.startsWith(item.href) && item.href.split('/').length > 2);
                 const Icon = item.icon;
+                if (item.children) {
+                  const childActive = item.children.some((c) => isActive(pathname, c.href));
+                  const expanded = open[item.label] ?? childActive;
+                  return (
+                    <div key={item.label}>
+                      <button
+                        type="button"
+                        onClick={() => toggle(item.label, !expanded)}
+                        aria-expanded={expanded}
+                        className={cn(
+                          'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-[var(--muted)]',
+                          childActive && !expanded ? 'font-semibold text-[var(--primary)]' : 'text-[var(--foreground)]',
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                        <ChevronRight
+                          className={cn('ml-auto size-4 shrink-0 transition-transform', expanded && 'rotate-90')}
+                        />
+                      </button>
+                      {expanded ? (
+                        <div className="ml-4 mt-1 space-y-1 border-l pl-2">
+                          {item.children.map((child) => {
+                            const ChildIcon = child.icon;
+                            return (
+                              <Link
+                                key={child.href}
+                                href={child.href ?? '#'}
+                                onClick={onNavigate}
+                                className={linkClass(isActive(pathname, child.href))}
+                              >
+                                <ChildIcon className="size-4 shrink-0" />
+                                <span className="truncate">{child.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                }
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={item.href ?? '#'}
                     onClick={onNavigate}
-                    className={cn(
-                      'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
-                      active
-                        ? 'bg-[var(--accent)] font-semibold text-[var(--accent-foreground)]'
-                        : 'text-[var(--foreground)] hover:bg-[var(--muted)]',
-                    )}
+                    className={linkClass(isActive(pathname, item.href))}
                   >
                     <Icon className="size-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
