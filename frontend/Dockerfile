@@ -4,7 +4,8 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 # Cache npm giữa các lần dựng (BuildKit) — chỉ cài lại khi package*.json đổi
-RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no-fund
+RUN --mount=type=cache,id=qlbs-npm-web,target=/root/.npm,sharing=locked \
+    npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
 # ---------- Bước 2: biên dịch Next.js ----------
 FROM node:22-alpine AS build
@@ -17,7 +18,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ARG API_PROXY_TARGET=http://api:4000
 ENV API_PROXY_TARGET=$API_PROXY_TARGET
 # Giữ cache biên dịch của Next.js giữa các lần dựng → lần sau nhanh hơn nhiều
-RUN --mount=type=cache,target=/app/.next/cache npm run build
+RUN --mount=type=cache,id=qlbs-next-cache,target=/app/.next/cache,sharing=locked npm run build
 
 # ---------- Bước 3: ảnh chạy thật ----------
 FROM node:22-alpine AS runtime

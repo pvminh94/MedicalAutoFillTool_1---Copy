@@ -103,7 +103,17 @@ fi
 START=$(date +%s)
 if [[ ${#BUILD[@]} -gt 0 ]]; then
   step "Dựng lại: ${BUILD[*]} (có cache — lần sau nhanh hơn)"
-  "${DC[@]}" build "${BUILD[@]}"
+  # Dựng lần lượt (không song song): đỡ tốn RAM trên VPS nhỏ và log lỗi rõ ràng
+  for svc in "${BUILD[@]}"; do
+    printf '  → đang dựng %s ...\n' "$svc"
+    LOG="/tmp/qlbs-build-$svc.log"
+    if ! "${DC[@]}" build --progress=plain "$svc" >"$LOG" 2>&1; then
+      printf '\n%s✗ Dựng %s thất bại — 40 dòng log cuối:%s\n' "$C_R" "$svc" "$C_0"
+      grep -vE 'npm warn deprecated' "$LOG" | tail -40
+      die "Log đầy đủ: $LOG (gửi file này nếu cần hỗ trợ)"
+    fi
+    ok "Đã dựng $svc ($(grep -cE '^#[0-9]+ CACHED' "$LOG" || true) bước dùng cache)"
+  done
   step "Khởi động lại: ${BUILD[*]}"
   "${DC[@]}" up -d --no-deps "${BUILD[@]}"
 fi

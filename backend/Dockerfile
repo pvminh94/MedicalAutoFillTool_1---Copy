@@ -4,7 +4,8 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 # Cache npm giữa các lần dựng (BuildKit) — chỉ cài lại khi package*.json đổi
-RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no-fund
+RUN --mount=type=cache,id=qlbs-npm-api,target=/root/.npm,sharing=locked \
+    npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
 # ---------- Bước 2: biên dịch TypeScript ----------
 FROM node:22-alpine AS build
