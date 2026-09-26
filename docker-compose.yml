@@ -83,6 +83,9 @@ services:
   web:
     build:
       context: ./frontend
+      args:
+        # Phải có lúc build: Next.js "đóng băng" đích proxy /api vào bản build
+        API_PROXY_TARGET: http://api:4000
     container_name: qlbs-web
     restart: unless-stopped
     depends_on:

@@ -11,8 +11,11 @@ FROM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Địa chỉ API chỉ dùng khi chạy (proxy của Next đọc biến này lúc khởi động)
 ENV NEXT_TELEMETRY_DISABLED=1
+# Next.js ghi đích chuyển tiếp /api (rewrites) vào .next/routes-manifest.json NGAY LÚC
+# BUILD — đặt biến ở runtime là không đủ. Mặc định trỏ tới service "api" trong compose.
+ARG API_PROXY_TARGET=http://api:4000
+ENV API_PROXY_TARGET=$API_PROXY_TARGET
 # Giữ cache biên dịch của Next.js giữa các lần dựng → lần sau nhanh hơn nhiều
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
