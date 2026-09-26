@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/input';
+import { toList } from '@/lib/utils';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Paginated } from '@/types/api';
@@ -56,7 +57,7 @@ export default function CreateHsbaPage() {
 
   const { data: workflows } = useQuery({
     queryKey: ['hsba-workflows'],
-    queryFn: () => apiFetch<WorkflowOption[]>('/hsba/workflows'),
+    queryFn: () => apiFetch<unknown>('/hsba/workflows?pageSize=200').then((d) => toList<WorkflowOption>(d)),
   });
 
   const create = useMutation({

@@ -69,7 +69,7 @@ export class AuthController {
   @Get('profile')
   @ApiOperation({ summary: 'Hồ sơ cá nhân chi tiết' })
   profile(@CurrentUser() user: AccessContext) {
-    return this.authService.profile(user.id);
+    return this.authService.profile(user.id, user.permissions);
   }
 
   @ApiBearerAuth()

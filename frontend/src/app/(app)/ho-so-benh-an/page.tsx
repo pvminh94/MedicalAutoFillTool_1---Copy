@@ -25,7 +25,7 @@ import { Input, Select } from '@/components/ui/input';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { cn, formatDate, formatNumber } from '@/lib/utils';
+import { cn, formatDate, formatNumber, toList } from '@/lib/utils';
 import type { Paginated } from '@/types/api';
 
 interface HsbaRow {
@@ -118,7 +118,7 @@ function RequestsContent() {
 
   const { data: workflows } = useQuery({
     queryKey: ['hsba-workflows'],
-    queryFn: () => apiFetch<WorkflowOption[]>('/hsba/workflows'),
+    queryFn: () => apiFetch<unknown>('/hsba/workflows?pageSize=200').then((d) => toList<WorkflowOption>(d)),
   });
 
   const statusTabs = buildStatusTabs(

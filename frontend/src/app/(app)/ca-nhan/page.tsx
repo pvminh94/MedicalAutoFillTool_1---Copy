@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, toList } from '@/lib/utils';
 
 interface Profile {
   id: number;
@@ -50,7 +50,7 @@ export default function ProfilePage() {
 
   const { data: sessions } = useQuery({
     queryKey: ['sessions'],
-    queryFn: () => apiFetch<SessionInfo[]>('/auth/sessions'),
+    queryFn: () => apiFetch<unknown>('/auth/sessions').then((d) => toList<SessionInfo>(d, 'sessions')),
   });
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export default function ProfilePage() {
               </div>
               <div className="space-y-3 p-4">
                 <div className="flex flex-wrap gap-1.5">
-                  {profile.roles.map((role) => (
+                  {(profile.roles ?? []).map((role) => (
                     <Badge key={role.code} tone="info">
                       {role.name}
                     </Badge>

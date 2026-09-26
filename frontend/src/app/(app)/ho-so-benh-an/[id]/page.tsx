@@ -32,7 +32,7 @@ import {
 } from '@/components/hsba/request-form';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { cn, formatDate, formatDateTime } from '@/lib/utils';
+import { cn, formatDate, formatDateTime, toList } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/status-badge';
 import type { Paginated } from '@/types/api';
 
@@ -139,7 +139,7 @@ export default function HsbaDetailPage() {
   const { data: workflowOptions } = useQuery({
     queryKey: ['hsba-workflows'],
     enabled: editOpen,
-    queryFn: () => apiFetch<WorkflowOption[]>('/hsba/workflows'),
+    queryFn: () => apiFetch<unknown>('/hsba/workflows?pageSize=200').then((d) => toList<WorkflowOption>(d)),
   });
 
   const updateRequest = useMutation({

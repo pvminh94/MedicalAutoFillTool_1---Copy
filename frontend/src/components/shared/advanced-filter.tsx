@@ -59,13 +59,29 @@ export interface AdvancedFilterProps {
 
 let conditionSeq = 0;
 
+/** Đọc bộ lọc đã lưu (preset) của một tài nguyên từ localStorage. */
+function loadPresets(key: string): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function AdvancedFilter({ resource, value, onChange, className, defaultOpen }: AdvancedFilterProps) {
   const presetsKey = `qlbs_filters_${resource}`;
   const [open, setOpen] = useState(!!defaultOpen);
   const [conditions, setConditions] = useState<Condition[]>(() => parseFilterString(value));
   const [presetName, setPresetName] = useState('');
   const [savingPreset, setSavingPreset] = useState(false);
-  const [presets, setPresets] = useState<Record<string, string>>(() => loadPresets());
+  // Khởi tạo rỗng rồi mới đọc localStorage sau khi gắn vào DOM: tránh lỗi TDZ
+  // (gọi hàm trước khi khai báo) và lệch hydrate giữa máy chủ và trình duyệt.
+  const [presets, setPresets] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setPresets(loadPresets(presetsKey));
+  }, [presetsKey]);
 
   const spec = useQuery({
     queryKey: ['meta-filters', resource],
@@ -165,15 +181,6 @@ export function AdvancedFilter({ resource, value, onChange, className, defaultOp
   const clearAll = (): void => {
     setConditions([]);
     onChange('', { conditions: [] });
-  };
-
-  const loadPresets = (): Record<string, string> => {
-    if (typeof window === 'undefined') return {};
-    try {
-      return JSON.parse(window.localStorage.getItem(presetsKey) ?? '{}') as Record<string, string>;
-    } catch {
-      return {};
-    }
   };
 
   const persistPresets = (next: Record<string, string>): void => {

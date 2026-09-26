@@ -46,3 +46,20 @@ export function normalizeVN(input: string): string {
     .replace(/Đ/g, 'D')
     .toLowerCase();
 }
+
+/**
+ * Chuẩn hoá dữ liệu danh sách trả về từ API.
+ *
+ * Một số endpoint trả mảng phẳng, một số trả dạng phân trang `{ items, total, … }`,
+ * một số bọc trong khoá riêng (ví dụ `{ total, sessions }`). Hàm này luôn trả về mảng
+ * để giao diện gọi `.map/.find` an toàn, tránh lỗi "Application error" phía trình duyệt.
+ */
+export function toList<T>(data: unknown, key?: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (key && Array.isArray(obj[key])) return obj[key] as T[];
+    if (Array.isArray(obj.items)) return obj.items as T[];
+  }
+  return [];
+}

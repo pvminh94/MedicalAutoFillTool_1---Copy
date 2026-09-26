@@ -11,7 +11,7 @@ import { ConfirmDialog } from '@/components/ui/dialog';
 import { Input, Label, Select, Switch, Textarea } from '@/components/ui/input';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { cn } from '@/lib/utils';
+import { cn, toList } from '@/lib/utils';
 
 interface WorkflowStep {
   key: string;
@@ -71,7 +71,7 @@ export default function WorkflowsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['hsba-workflows'],
-    queryFn: () => apiFetch<Workflow[]>('/hsba/workflows'),
+    queryFn: () => apiFetch<unknown>('/hsba/workflows?pageSize=200').then((d) => toList<Workflow>(d)),
   });
 
   const { data: roles } = useQuery({

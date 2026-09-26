@@ -353,7 +353,7 @@ export class AuthService {
 
   /* ------------------------------------------------------------------ Hồ sơ */
 
-  async profile(userId: number) {
+  async profile(userId: number, permissions?: readonly string[]) {
     const [user] = await this.db.db
       .select({
         id: users.id,
@@ -375,7 +375,17 @@ export class AuthService {
       .where(eq(users.id, userId))
       .limit(1);
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
-    return user;
+
+    // Trang "Hồ sơ cá nhân" hiển thị vai trò (tên + phạm vi) và thống kê quyền theo phân hệ;
+    // thiếu hai trường này giao diện sẽ lỗi khi gọi .map trên undefined.
+    const roleRows = await this.db.db
+      .select({ code: roles.code, name: roles.name, dataScope: roles.dataScope })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(and(eq(userRoles.userId, userId), eq(roles.active, true)))
+      .orderBy(roles.priority);
+
+    return { ...user, roles: roleRows, permissions: [...(permissions ?? [])].sort() };
   }
 
   async updateProfile(userId: number, dto: UpdateProfileDto) {
