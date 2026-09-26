@@ -119,8 +119,18 @@ docker compose exec -T postgres pg_restore -U qlbs -d qlbs --clean --if-exists <
 
 **Sao lưu tệp tải lên** — thư mục `UPLOAD_HOST_DIR` (mặc định `./data/uploads`).
 
-Hệ thống cũng có sẵn tiện ích **Sao lưu** trong *Quản trị → Cấu hình* (quyền
-`backup.create`, `backup.restore`) để tạo và khôi phục bản sao lưu ngay trên giao diện.
+**Sao lưu tự động trong ứng dụng** — tác vụ `BACKUP_HANG_NGAY` (*Quản trị → Tác vụ định kỳ*,
+mặc định 23:30 hằng ngày, bấm ▶ để chạy ngay, xem kết quả ở *Lịch sử chạy*):
+
+* Sao **toàn bộ** các bảng trong schema `public` (phiếu HSBA, chữ ký, nhật ký, số liệu,
+  bản chốt, người dùng, cấu hình…) trong một giao dịch nhất quán, ra tệp JSON nén
+  `qlbs-<thời-gian>.json.gz`.
+* Tệp nằm trong `BACKUP_HOST_DIR` trên máy chủ (mặc định `./data/backups`).
+* Tự giữ lại `keep` bản mới nhất — sửa trong tham số tác vụ, ví dụ `{"keep": 30}` (mặc định 14).
+* Xem nhanh nội dung: `zcat data/backups/qlbs-*.json.gz | head -c 600`.
+
+> Bản JSON dùng để lưu trữ/đối chiếu và trích lại dữ liệu từng bảng. Để **phục hồi toàn bộ**
+> hệ thống nhanh nhất vẫn nên dùng `pg_dump`/`pg_restore` ở trên — nên đặt cả hai.
 
 Nên đặt lịch sao lưu tự động (ví dụ cron hằng ngày 0h) và giữ tối thiểu 7 bản gần nhất.
 

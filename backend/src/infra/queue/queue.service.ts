@@ -29,7 +29,15 @@ export interface JobContext {
   userId?: number;
   /** Mã lần chạy trong bảng job_runs */
   runId?: number;
+  /** id tác vụ trong bảng scheduled_jobs (để ghi lịch sử đúng tác vụ) */
+  jobId?: number;
+  /** Mã tác vụ trong scheduled_jobs (vd BACKUP_HANG_NGAY) — khác mã hàm xử lý (vd db.backup) */
+  jobCode?: string;
 }
+
+/** Khoá ẩn gắn vào dữ liệu việc trong hàng đợi để biết việc thuộc tác vụ nào */
+const META_JOB_ID = '__jobId';
+const META_JOB_CODE = '__jobCode';
 
 export interface JobResult {
   message?: string;
@@ -92,6 +100,8 @@ function nextRunDelay(cron: string, timezone: string, from = new Date()): number
 export class QueueService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(QueueService.name);
   private readonly handlers = new Map<string, JobHandler>();
+  /** Mã tác vụ → hàm xử lý (tương thích việc cũ đặt tên theo mã tác vụ) */
+  private readonly aliases = new Map<string, { handler: string; jobId?: number }>();
   private readonly schedules = new Map<string, InlineSchedule>();
   private queue: Queue | null = null;
   private worker: Worker | null = null;
@@ -119,12 +129,17 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
         });
         this.worker = new BullWorker(
           'qlbs-jobs',
-          async (job: Job) => this.dispatch(String(job.name), {
-            code: String(job.name),
-            payload: (job.data ?? {}) as Record<string, unknown>,
-            trigger: 'queue',
-            runId: (job.data as { runId?: number })?.runId,
-          }),
+          async (job: Job) => {
+            const { [META_JOB_ID]: jobId, [META_JOB_CODE]: jobCode, runId, ...payload } = (job.data ?? {}) as Record<string, unknown>;
+            return this.dispatch(String(job.name), {
+              code: String(job.name),
+              payload,
+              trigger: 'queue',
+              runId: typeof runId === 'number' ? runId : undefined,
+              jobId: typeof jobId === 'number' ? jobId : undefined,
+              jobCode: typeof jobCode === 'string' ? jobCode : undefined,
+            });
+          },
           { connection: this.connection, prefix: config.queue.prefix, concurrency: config.queue.concurrency },
         );
         this.worker.on('failed', (job, err) =>
@@ -166,7 +181,15 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
   }
 
   private async dispatch(code: string, ctx: JobContext): Promise<JobResult | void> {
-    const handler = this.handlers.get(code);
+    let handler = this.handlers.get(code);
+    if (!handler) {
+      // Việc cũ còn trong Redis được đặt tên theo MÃ TÁC VỤ (bản trước) → tra bí danh
+      const alias = this.aliases.get(code);
+      if (alias) {
+        handler = this.handlers.get(alias.handler);
+        ctx = { ...ctx, code: alias.handler, jobId: ctx.jobId ?? alias.jobId, jobCode: ctx.jobCode ?? code };
+      }
+    }
     if (!handler) {
       throw new Error(`Chưa đăng ký hàm xử lý cho tác vụ "${code}"`);
     }
@@ -200,8 +223,13 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
   }
 
   /** Chạy ngay và chờ kết quả (dùng cho nút "Chạy ngay" trên giao diện) */
-  async runNow(code: string, payload: Record<string, unknown> = {}, userId?: number): Promise<JobResult | void> {
-    return this.dispatch(code, { code, payload, trigger: 'manual', userId });
+  async runNow(
+    code: string,
+    payload: Record<string, unknown> = {},
+    userId?: number,
+    meta: { jobId?: number; jobCode?: string } = {},
+  ): Promise<JobResult | void> {
+    return this.dispatch(code, { code, payload, trigger: 'manual', userId, ...meta });
   }
 
   /* ------------------------------------------------------------- Lịch định kỳ */
@@ -212,6 +240,10 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
    */
   async upsertSchedule(job: {
     code: string;
+    /** Mã hàm xử lý (vd db.backup). Bỏ trống = trùng mã tác vụ */
+    handler?: string;
+    /** id trong scheduled_jobs để ghi lịch sử chạy */
+    jobId?: number;
     cron: string;
     timezone: string;
     payload?: Record<string, unknown>;
@@ -219,6 +251,9 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
   }): Promise<void> {
     await this.removeSchedule(job.code);
     if (!job.active) return;
+    const handlerCode = job.handler ?? job.code;
+    this.aliases.set(job.code, { handler: handlerCode, jobId: job.jobId });
+    const data = { ...(job.payload ?? {}), [META_JOB_ID]: job.jobId, [META_JOB_CODE]: job.code };
 
     if (this.queue) {
       const q = this.queue as unknown as {
@@ -232,15 +267,16 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
         await q.upsertJobScheduler(
           job.code,
           { pattern: job.cron, tz: job.timezone },
-          { name: job.code, data: job.payload ?? {}, opts: { removeOnComplete: 100, removeOnFail: 200 } },
+          // Tên việc = mã HÀM XỬ LÝ (trước đây dùng mã tác vụ → worker không tìm thấy hàm, việc định kỳ luôn lỗi)
+          { name: handlerCode, data, opts: { removeOnComplete: 100, removeOnFail: 200 } },
         );
       } else {
         // Phiên bản BullMQ cũ hơn: dùng tuỳ chọn repeat
         await (this.queue as unknown as {
           add: (name: string, data: unknown, opts: unknown) => Promise<unknown>;
         }).add(
-          job.code,
-          job.payload ?? {},
+          handlerCode,
+          data,
           { repeat: { pattern: job.cron, tz: job.timezone }, jobId: `repeat:${job.code}` },
         );
       }
@@ -250,10 +286,12 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
     // Chế độ inline: tự lên lịch bằng setTimeout
     const tick = async (): Promise<void> => {
       try {
-        await this.dispatch(job.code, {
-          code: job.code,
+        await this.dispatch(handlerCode, {
+          code: handlerCode,
           payload: job.payload ?? {},
           trigger: 'queue',
+          jobId: job.jobId,
+          jobCode: job.code,
         });
       } catch (err) {
         this.logger.error(`Tác vụ định kỳ ${job.code}: ${(err as Error).message}`);
@@ -269,6 +307,7 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
   }
 
   async removeSchedule(code: string): Promise<void> {
+    this.aliases.delete(code);
     const existing = this.schedules.get(code);
     if (existing) {
       clearTimeout(existing.timer);
@@ -286,7 +325,8 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
       if (typeof q.getRepeatableJobs === 'function') {
         const repeats = (await q.getRepeatableJobs().catch(() => [])) ?? [];
         for (const r of repeats) {
-          if (r.name === code && typeof q.removeRepeatableByKey === 'function') {
+          const ours = r.name === code || r.key.includes(`repeat:${code}`);
+          if (ours && typeof q.removeRepeatableByKey === 'function') {
             await q.removeRepeatableByKey(r.key).catch(() => undefined);
           }
         }

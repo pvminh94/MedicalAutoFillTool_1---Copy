@@ -12,7 +12,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { CronExpressionParser } from 'cron-parser';
-import { and, asc, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { config } from '../../config/env';
 import { DbService } from '../../db/db.service';
 import { jobRuns, scheduledJobs } from '../../db/schema';
@@ -101,7 +101,8 @@ export class SchedulerService implements OnModuleInit {
     const [run] = await this.db.db
       .insert(jobRuns)
       .values({
-        jobCode: code,
+        jobId: ctx.jobId ?? null,
+        jobCode: ctx.jobCode ?? code,
         status: 'RUNNING',
         trigger: ctx.trigger,
         triggeredBy: ctx.userId ?? null,
@@ -123,7 +124,7 @@ export class SchedulerService implements OnModuleInit {
           })
           .where(eq(jobRuns.id, run.id));
       }
-      await this.markJobRun(code, 'SUCCESS', durationMs, '');
+      await this.markJobRun(ctx, 'SUCCESS', durationMs, '');
       return result;
     } catch (err) {
       const durationMs = Date.now() - started;
@@ -140,13 +141,13 @@ export class SchedulerService implements OnModuleInit {
           })
           .where(eq(jobRuns.id, run.id));
       }
-      await this.markJobRun(code, 'FAILED', durationMs, message);
+      await this.markJobRun(ctx, 'FAILED', durationMs, message);
       throw err;
     }
   }
 
   private async markJobRun(
-    code: string,
+    ctx: JobContext,
     status: JobStatus,
     durationMs: number,
     error: string,
@@ -162,7 +163,8 @@ export class SchedulerService implements OnModuleInit {
         ...(status === 'FAILED' ? { failCount: sql`${scheduledJobs.failCount} + 1` } : {}),
         updatedAt: new Date(),
       })
-      .where(eq(scheduledJobs.code, code));
+      // Theo id (hoặc mã) TÁC VỤ — trước đây dùng mã hàm xử lý nên không cập nhật được dòng nào
+      .where(ctx.jobId ? eq(scheduledJobs.id, ctx.jobId) : eq(scheduledJobs.code, ctx.jobCode ?? ctx.code));
   }
 
   /** Đẩy toàn bộ lịch đang bật vào hàng đợi */
@@ -178,6 +180,8 @@ export class SchedulerService implements OnModuleInit {
       }
       await this.queue.upsertSchedule({
         code: job.code,
+        handler: job.handler,
+        jobId: job.id,
         cron: job.cron,
         timezone: job.timezone,
         payload: job.payload,
@@ -247,14 +251,22 @@ export class SchedulerService implements OnModuleInit {
       .where(eq(scheduledJobs.id, id))
       .limit(1);
     if (!job) throw new NotFoundException('Không tìm thấy tác vụ');
-    return { ...job, runs: await this.runs(job.id, 50) };
+    return { ...job, runs: await this.runs(job.id, 50, job.handler) };
   }
 
-  async runs(jobId: number, limit = 50) {
+  async runs(jobId: number, limit = 50, legacyHandler?: string) {
     return this.db.db
       .select()
       .from(jobRuns)
-      .where(eq(jobRuns.jobId, jobId))
+      .where(
+        legacyHandler
+          ? or(
+              eq(jobRuns.jobId, jobId),
+              // Lần chạy ghi bởi bản cũ: thiếu job_id, job_code là mã hàm xử lý
+              and(isNull(jobRuns.jobId), eq(jobRuns.jobCode, legacyHandler)),
+            )
+          : eq(jobRuns.jobId, jobId),
+      )
       .orderBy(desc(jobRuns.startedAt))
       .limit(limit);
   }
@@ -318,6 +330,8 @@ export class SchedulerService implements OnModuleInit {
     if (created.active) {
       await this.queue.upsertSchedule({
         code: created.code,
+        handler: created.handler,
+        jobId: created.id,
         cron: created.cron,
         timezone: created.timezone,
         payload: created.payload,
@@ -360,6 +374,8 @@ export class SchedulerService implements OnModuleInit {
     if (updated.active) {
       await this.queue.upsertSchedule({
         code: updated.code,
+        handler: updated.handler,
+        jobId: updated.id,
         cron: updated.cron,
         timezone: updated.timezone,
         payload: updated.payload,
@@ -385,7 +401,7 @@ export class SchedulerService implements OnModuleInit {
     this.running.add(job.code);
     const started = Date.now();
     try {
-      const result = await this.queue.runNow(job.handler, job.payload, userId);
+      const result = await this.queue.runNow(job.handler, job.payload, userId, { jobId: job.id, jobCode: job.code });
       return {
         message: String((result as JobResult | undefined)?.message ?? 'Tác vụ đã chạy xong'),
         durationMs: Date.now() - started,

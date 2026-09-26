@@ -27,6 +27,8 @@ interface JobRun {
   durationMs?: number;
   message?: string;
   error?: string;
+  errorStack?: string;
+  trigger?: string;
 }
 
 /** Tác vụ định kỳ: sao lưu, chốt số liệu, dọn tệp, nhắc nhở nhập báo cáo… */
@@ -47,12 +49,22 @@ export default function JobsPage() {
   });
 
   const runNow = useMutation({
-    mutationFn: (id: number) => apiFetch(`/jobs/${id}/run`, { method: 'POST' }),
-    onSuccess: async () => {
-      toast.success('Đã kích hoạt tác vụ — xem kết quả trong lịch sử chạy');
-      await queryClient.invalidateQueries({ queryKey: ['/jobs'] });
+    mutationFn: (id: number) =>
+      apiFetch<{ message?: string; durationMs?: number }>(`/jobs/${id}/run`, { method: 'POST' }),
+    onMutate: () => toast.loading('Đang chạy tác vụ…', { id: 'job-run' }),
+    onSuccess: async (res) => {
+      // API chạy xong mới trả về → hiện đúng kết quả thay vì chỉ "đã kích hoạt"
+      const secs = res?.durationMs ? ` (${(res.durationMs / 1000).toFixed(1)}s)` : '';
+      toast.success(`${res?.message ?? 'Tác vụ đã chạy xong'}${secs}`, { id: 'job-run', duration: 8000 });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['job-runs'] }),
+      ]);
     },
-    onError: (err) => toast.error((err as Error).message),
+    onError: async (err) => {
+      toast.error((err as Error).message, { id: 'job-run', duration: 10000 });
+      await queryClient.invalidateQueries({ queryKey: ['job-runs'] });
+    },
   });
 
   const toggle = useMutation({
@@ -220,7 +232,9 @@ export default function JobsPage() {
                   </span>
                 </div>
                 {run.message ? <div className="mt-1 text-xs text-[var(--muted-foreground)]">{run.message}</div> : null}
-                {run.error ? <div className="mt-1 text-xs text-[var(--danger)]">{run.error}</div> : null}
+                {run.status === 'FAILED' && (run.error || run.errorStack) ? (
+                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-[var(--danger)]">{(run.error || run.errorStack || '').split('\n').slice(0, 4).join('\n')}</pre>
+                ) : null}
               </div>
             ))
           ) : (
