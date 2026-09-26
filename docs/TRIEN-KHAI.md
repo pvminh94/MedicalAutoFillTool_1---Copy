@@ -126,6 +126,18 @@ Nên đặt lịch sao lưu tự động (ví dụ cron hằng ngày 0h) và gi�
 
 ## 5. Nâng cấp phiên bản
 
+**Cách nhanh (khuyến nghị)** — script tự `git pull`, chỉ dựng lại phần có thay đổi
+(`backend/` → api, `frontend/` → web, chỉ đổi tài liệu → không dựng gì), dùng cache
+npm + cache Next.js, rồi tự kiểm tra `/health`, trang đăng nhập và proxy:
+
+```bash
+cd /opt/qlbs
+sudo bash deploy/update.sh              # thêm --backup để sao lưu CSDL trước
+sudo bash deploy/update.sh --web        # ép dựng lại riêng giao diện (--api, --all)
+```
+
+**Cách thủ công:**
+
 ```bash
 cd /opt/qlbs
 git pull

@@ -1,8 +1,10 @@
+# syntax=docker/dockerfile:1
 # ---------- Bước 1: cài phụ thuộc ----------
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+# Cache npm giữa các lần dựng (BuildKit) — chỉ cài lại khi package*.json đổi
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no-fund
 
 # ---------- Bước 2: biên dịch TypeScript ----------
 FROM node:22-alpine AS build

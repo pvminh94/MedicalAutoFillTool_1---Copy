@@ -1,8 +1,10 @@
+# syntax=docker/dockerfile:1
 # ---------- Bước 1: cài phụ thuộc ----------
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+# Cache npm giữa các lần dựng (BuildKit) — chỉ cài lại khi package*.json đổi
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no-fund
 
 # ---------- Bước 2: biên dịch Next.js ----------
 FROM node:22-alpine AS build
@@ -11,7 +13,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Địa chỉ API chỉ dùng khi chạy (proxy của Next đọc biến này lúc khởi động)
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# Giữ cache biên dịch của Next.js giữa các lần dựng → lần sau nhanh hơn nhiều
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # ---------- Bước 3: ảnh chạy thật ----------
 FROM node:22-alpine AS runtime

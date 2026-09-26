@@ -13,6 +13,30 @@ import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDateTime } from '@/lib/utils';
 
+/**
+ * Chuẩn hoá danh sách vai trò của một người dùng.
+ * API `/users` trả mảng `{ name, code, color }`; vẫn nhận dạng chuỗi cũ `tên|mã|màu;;…`.
+ * (Trước đây trang chỉ hiểu dạng chuỗi nên người dùng đã có vai trò bị gửi mã rỗng
+ * → "Vai trò không tồn tại" và các ô tích không được đánh dấu.)
+ */
+function parseUserRoles(value: unknown): { name: string; code: string }[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((r) => (typeof r === 'string' ? { name: r, code: r } : { name: String(r?.name ?? r?.code ?? ''), code: String(r?.code ?? '') }))
+      .filter((r) => r.code);
+  }
+  if (typeof value === 'string' && value) {
+    return value
+      .split(';;')
+      .map((part) => {
+        const [name = '', code = ''] = part.split('|');
+        return { name: name || code, code };
+      })
+      .filter((r) => r.code);
+  }
+  return [];
+}
+
 interface RoleOption {
   id: number;
   code: string;
@@ -128,12 +152,11 @@ export default function UsersPage() {
             key: 'roles',
             label: 'Vai trò',
             render: (row) => {
-              const raw = String(row.roles ?? '');
-              if (!raw) return <span className="text-[var(--muted-foreground)]">Chưa gán</span>;
+              const list = parseUserRoles(row.roles);
+              if (!list.length) return <span className="text-[var(--muted-foreground)]">Chưa gán</span>;
               return (
                 <div className="flex flex-wrap gap-1">
-                  {raw.split(';;').map((part) => {
-                    const [name, code] = part.split('|');
+                  {list.map(({ name, code }) => {
                     return (
                       <Badge key={code} tone="muted">
                         <span title={code}>{name}</span>
@@ -168,7 +191,7 @@ export default function UsersPage() {
                 title="Gán vai trò"
                 onClick={() => {
                   setRoleTarget(row);
-                  setRoleCodes(String(row.roles ?? '').split(';;').filter(Boolean).map((p) => p.split('|')[1] ?? ''));
+                  setRoleCodes(parseUserRoles(row.roles).map((r) => r.code));
                 }}
               >
                 <ShieldCheck />
@@ -201,7 +224,7 @@ export default function UsersPage() {
             </Button>
             <Button
               loading={setRoles.isPending}
-              onClick={() => roleTarget && setRoles.mutate({ id: Number(roleTarget.id), roleCodes })}
+              onClick={() => roleTarget && setRoles.mutate({ id: Number(roleTarget.id), roleCodes: [...new Set(roleCodes.filter(Boolean))] })}
             >
               Lưu vai trò
             </Button>

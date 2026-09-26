@@ -30,7 +30,7 @@ import {
   type UserOption,
   type WorkflowOption,
 } from '@/components/hsba/request-form';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ensureFileSession, openFileUrl } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn, formatDate, formatDateTime, toList } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/status-badge';
@@ -238,13 +238,17 @@ export default function HsbaDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           {can('hsba.request.print') ? (
             <>
-              <Button variant="outline" onClick={() => setShowPdf(true)}>
+              <Button variant="outline" onClick={() => void ensureFileSession().then(() => setShowPdf(true))}>
                 <Printer /> Xem bản in
               </Button>
               <a
                 href={`/api/hsba/requests/${data.id}/pdf`}
                 target="_blank"
                 rel="noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  void openFileUrl(`/api/hsba/requests/${data.id}/pdf`);
+                }}
                 className="inline-flex h-9.5 items-center gap-2 rounded-lg border bg-[var(--card)] px-4 text-sm font-medium hover:bg-[var(--accent)]"
               >
                 <FileDown className="size-4" /> Tải PDF

@@ -155,3 +155,29 @@ export async function downloadFile(path: string, fileName: string, options: Opti
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Bảo đảm cookie `qlbs_access` còn hiệu lực trước khi trình duyệt tự tải tệp
+ * (PDF/Excel mở ở tab mới hoặc trong iframe không gửi kèm header Authorization).
+ * Gọi nhẹ `/auth/me`: nếu token hết hạn, apiFetch tự làm mới và ghi lại cookie.
+ */
+export async function ensureFileSession(): Promise<void> {
+  const access = tokenStore.access;
+  if (access && typeof document !== 'undefined' && !document.cookie.includes('qlbs_access=')) {
+    setCookie('qlbs_access', access, 1);
+  }
+  try {
+    await apiFetch('/auth/me');
+  } catch {
+    /* để trang tải tệp tự báo lỗi nếu phiên thực sự đã hết */
+  }
+}
+
+/** Mở một đường dẫn tải tệp (PDF…) ở tab mới sau khi đã làm mới phiên đăng nhập. */
+export async function openFileUrl(url: string): Promise<void> {
+  // Mở tab ngay trong sự kiện bấm để không bị trình duyệt chặn cửa sổ bật lên
+  const win = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
+  await ensureFileSession();
+  if (win) win.location.href = url;
+  else window.location.href = url;
+}

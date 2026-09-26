@@ -23,7 +23,7 @@ import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, openFileUrl } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn, formatDate, formatNumber, toList } from '@/lib/utils';
 import type { Paginated } from '@/types/api';
@@ -458,6 +458,10 @@ function RequestsContent() {
                           href={`/api/hsba/requests/${row.id}/pdf`}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            void openFileUrl(`/api/hsba/requests/${row.id}/pdf`);
+                          }}
                           className="rounded-lg p-2 hover:bg-[var(--muted)]"
                           title="In phiếu PDF"
                         >
