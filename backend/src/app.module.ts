@@ -14,6 +14,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { config } from './config/env';
 import { DbModule } from './db/db.module';
 import { CacheModule } from './infra/cache/cache.module';
+import { MaintenanceModule } from './infra/maintenance/maintenance.module';
 import { QueueModule } from './infra/queue/queue.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -48,6 +49,7 @@ const envFile = [
     // Hạ tầng
     DbModule,
     CacheModule,
+    MaintenanceModule,
     QueueModule,
     // Nghiệp vụ hệ thống
     AuditModule,

@@ -16,6 +16,7 @@ import type { DbService } from '../../db/db.service';
 import { departments, roles, scheduledJobs, users } from '../../db/schema';
 import type { CacheService } from '../../infra/cache/cache.service';
 import type { JobContext, JobHandler, JobResult } from '../../infra/queue/queue.service';
+import { backupFileName, formatBytes, rotateBackups, writeBackup, type SqlExecutor } from '../backups/backup-writer';
 
 export interface HandlerDeps {
   db: DbService;
@@ -180,86 +181,21 @@ export function builtinHandlers(deps: HandlerDeps): Map<string, JobHandler> {
      * Bản vá trước chỉ sao 17 bảng danh mục, bỏ sót toàn bộ dữ liệu phiếu HSBA.
      */
     const dir = config.storage.backupsDir;
-    fs.mkdirSync(dir, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    // Nhãn tuỳ chọn gắn vào tên tệp (vd "truoc-phuc-hoi", "thu-cong") — chỉ chữ thường, số, gạch ngang
-    const labelRaw = String((ctx?.payload as { label?: unknown } | undefined)?.label ?? '');
-    const label = labelRaw.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-    const fileName = `qlbs-${stamp}${label ? `-${label}` : ''}.json.gz`;
+    // Nhãn tuỳ chọn gắn vào tên tệp (vd "thu-cong") — chỉ chữ thường, số, gạch ngang
+    const fileName = backupFileName(String((ctx?.payload as { label?: unknown } | undefined)?.label ?? ''));
     const fullPath = path.join(dir, fileName);
-    const tmpPath = `${fullPath}.partial`;
     const keepRaw = Number((ctx?.payload as { keep?: unknown } | undefined)?.keep ?? 14);
     const keep = Number.isFinite(keepRaw) && keepRaw >= 1 ? Math.floor(keepRaw) : 14;
 
-    const gzip = zlib.createGzip({ level: 6 });
-    const out = fs.createWriteStream(tmpPath);
-    const done = new Promise<void>((resolve, reject) => {
-      out.on('finish', resolve);
-      out.on('error', reject);
-      gzip.on('error', reject);
-    });
-    gzip.pipe(out);
-    const write = async (chunk: string): Promise<void> => {
-      if (!gzip.write(chunk)) await once(gzip, 'drain');
-    };
-
-    const counts: Record<string, number> = {};
-    let totalRows = 0;
-    try {
-      await db.db.transaction(
-        async (tx) => {
-          const res = await tx.execute(
-            sql.raw(
-              "select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by table_name",
-            ),
-          );
-          const tables = ((res as unknown as { rows: { table_name: string }[] }).rows ?? [])
-            .map((r) => r.table_name)
-            .filter((t) => /^[a-z_][a-z0-9_]*$/.test(t));
-
-          await write(`{"format":"qlbs-backup","version":2,"createdAt":${JSON.stringify(new Date().toISOString())},"tables":{`);
-          for (let ti = 0; ti < tables.length; ti++) {
-            const table = tables[ti]!;
-            await write(`${ti ? ',' : ''}${JSON.stringify(table)}:[`);
-            let n = 0;
-            for (let offset = 0; ; offset += 1000) {
-              const page = await tx.execute(sql.raw(`select * from "${table}" order by ctid limit 1000 offset ${offset}`));
-              const rows = ((page as unknown as { rows: unknown[] }).rows ?? []) as unknown[];
-              for (const row of rows) {
-                await write(`${n ? ',' : ''}${JSON.stringify(row)}`);
-                n++;
-              }
-              if (rows.length < 1000) break;
-            }
-            await write(']');
-            counts[table] = n;
-            totalRows += n;
-          }
-          await write(`},"counts":${JSON.stringify(counts)}}`);
-        },
-        { isolationLevel: 'repeatable read', accessMode: 'read only' },
-      );
-      gzip.end();
-      await done;
-      fs.renameSync(tmpPath, fullPath);
-    } catch (err) {
-      gzip.destroy();
-      out.destroy();
-      fs.rmSync(tmpPath, { force: true });
-      throw err;
-    }
+    const { counts, totalRows, size } = await db.db.transaction(
+      async (tx) => writeBackup(tx as unknown as SqlExecutor, fullPath),
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
 
     // Giữ lại `keep` bản mới nhất
-    const olds = fs
-      .readdirSync(dir)
-      .filter((f) => /^qlbs-.*\.json(\.gz)?$/.test(f))
-      .map((f) => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs }))
-      .sort((a, b) => b.t - a.t)
-      .slice(keep);
-    for (const o of olds) fs.rmSync(path.join(dir, o.f), { force: true });
-
-    const size = fs.statSync(fullPath).size;
-    const sizeText = size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`;
+    const removed = rotateBackups(dir, keep, [fileName]);
+    const olds = removed.map((f) => ({ f }));
+    const sizeText = formatBytes(size);
     logger.log(`Sao lưu CSDL: ${fileName} — ${Object.keys(counts).length} bảng, ${totalRows} dòng, ${sizeText}`);
     return {
       message: `Đã sao lưu ${Object.keys(counts).length} bảng · ${totalRows.toLocaleString('vi-VN')} dòng · ${sizeText} → ${fileName}${olds.length ? ` (đã xoá ${olds.length} bản cũ, giữ ${keep})` : ''}`,

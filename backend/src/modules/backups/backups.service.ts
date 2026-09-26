@@ -8,7 +8,14 @@
  * - Trước khi phục hồi luôn tự tạo một bản sao lưu an toàn (`…-truoc-phuc-hoi.json.gz`)
  *   để có thể quay lại trạng thái ngay trước đó.
  */
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -19,7 +26,9 @@ import { config } from '../../config/env';
 import { DbService } from '../../db/db.service';
 import { scheduledJobs } from '../../db/schema';
 import { CacheService } from '../../infra/cache/cache.service';
+import { MaintenanceService } from '../../infra/maintenance/maintenance.service';
 import { QueueService } from '../../infra/queue/queue.service';
+import { backupFileName, rotateBackups, writeBackup, type SqlExecutor } from './backup-writer';
 import { AuditService } from '../audit/audit.service';
 import { SchedulerService } from '../scheduler/scheduler.service';
 import type { AccessContext } from '../../common/types/access-context';
@@ -33,6 +42,19 @@ export const RESTORE_CONFIRM_TEXT = 'PHUC HOI';
 /** Khoá cache cần xoá sau khi phục hồi (giữ nguyên phiên đăng nhập và hàng đợi) */
 const CACHE_PREFIXES = ['auth:ctx:', 'dashboard:', 'dept:', 'hsba:', 'report:', 'setting:', 'warm:', 'digest:', 'tag:'];
 const INSERT_BATCH = 500;
+/** Số lần thử phục hồi khi tranh khoá, và thời gian chờ khoá mỗi lần */
+const RESTORE_ATTEMPTS = 3;
+const LOCK_WAIT_SECONDS = 10;
+
+/** Mã lỗi PostgreSQL (drizzle bọc lỗi gốc trong `cause`) */
+function pgErrorCode(err: unknown): string | undefined {
+  let e = err as { code?: unknown; cause?: unknown } | undefined;
+  for (let i = 0; i < 4 && e; i++) {
+    if (typeof e.code === 'string' && /^[0-9A-Z]{5}$/.test(e.code)) return e.code;
+    e = e.cause as typeof e;
+  }
+  return undefined;
+}
 
 interface BackupFile {
   format?: string;
@@ -61,6 +83,7 @@ export class BackupsService {
     private readonly queue: QueueService,
     private readonly audit: AuditService,
     private readonly scheduler: SchedulerService,
+    private readonly maintenance: MaintenanceService,
   ) {}
 
   private get dir(): string {
@@ -266,22 +289,57 @@ export class BackupsService {
     if (String(confirm ?? '').trim().toUpperCase() !== RESTORE_CONFIRM_TEXT) {
       throw new BadRequestException(`Hãy gõ đúng "${RESTORE_CONFIRM_TEXT}" để xác nhận phục hồi`);
     }
-    if (this.restoring) throw new BadRequestException('Đang có một lần phục hồi khác chạy, vui lòng đợi');
+    if (this.restoring || this.maintenance.current()) {
+      throw new ConflictException('Đang có một lần phục hồi khác chạy, vui lòng đợi');
+    }
     const full = this.resolve(name);
     this.restoring = true;
     const started = Date.now();
     try {
-      // 1) Đọc bản sao lưu vào bộ nhớ TRƯỚC khi tạo bản an toàn (bản an toàn có thể làm
-      //    xoay vòng/xoá tệp cũ nhất — có khi chính là tệp đang phục hồi).
+      // 1) Đọc & kiểm tra bản sao lưu vào bộ nhớ trước (tệp có thể bị xoay vòng xoá sau đó)
       const data = await this.load(full);
       const check = this.restorable(data);
       if (!check.ok) throw new BadRequestException(check.reason);
 
-      // 2) Bản sao lưu an toàn của trạng thái hiện tại
-      const safety = (await this.create(user, 'truoc-phuc-hoi')) as { fileName: string };
+      // 2) Bật bảo trì: yêu cầu mới của người khác nhận 503 "đang phục hồi" thay vì treo/ghi mất.
+      //    Chờ các thao tác ghi đang xử lý dở hoàn tất (tối đa 10 giây).
+      await this.maintenance.start(
+        'restore',
+        'Hệ thống đang phục hồi dữ liệu từ bản sao lưu — thao tác tạm dừng trong ít phút. Trang sẽ tự tải lại khi xong.',
+        user.fullName || user.username,
+      );
+      const stillRunning = await this.maintenance.drain(10_000);
+      if (stillRunning > 0) this.logger.warn(`Còn ${stillRunning} yêu cầu ghi chưa xong sau 10 giây — tiếp tục, khoá bảng sẽ chờ chúng`);
 
-      // 3) Phục hồi trong một giao dịch
-      const summary = await this.applyRestore(data);
+      // 3) Phục hồi — tự thử lại khi tranh khoá (deadlock / hết thời gian chờ khoá)
+      const safetyName = backupFileName('truoc-phuc-hoi');
+      const safetyPath = path.join(this.dir, safetyName);
+      let summary: Awaited<ReturnType<BackupsService['applyRestore']>> | undefined;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          summary = await this.applyRestore(data, safetyPath);
+          break;
+        } catch (err) {
+          // Giao dịch đã quay lui → dữ liệu hiện tại còn nguyên, bản an toàn dở dang không cần giữ
+          fs.rmSync(safetyPath, { force: true });
+          const code = pgErrorCode(err);
+          const retryable = code === '40P01' || code === '55P03' || code === '40001';
+          // Deadlock: thử lại tối đa 3 lần. Hết giờ chờ khoá (có truy vấn chạy lâu): chỉ thử thêm
+          // 1 lần — tránh khoá hệ thống quá lâu với người dùng khác.
+          const maxAttempts = code === '55P03' ? 2 : RESTORE_ATTEMPTS;
+          if (retryable && attempt < maxAttempts) {
+            this.logger.warn(`Phục hồi lần ${attempt} gặp tranh khoá (${code}) — thử lại`);
+            await new Promise((r) => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+          if (retryable) {
+            throw new ServiceUnavailableException(
+              'Hệ thống đang bận: có thao tác chạy lâu (ví dụ báo cáo lớn) đang giữ dữ liệu. Dữ liệu CHƯA thay đổi — vui lòng thử lại sau ít phút.',
+            );
+          }
+          throw err;
+        }
+      }
 
       // 4) Xoá cache nghiệp vụ (giữ phiên đăng nhập và hàng đợi)
       for (const p of CACHE_PREFIXES) await this.cache.delByPrefix(p).catch(() => 0);
@@ -289,8 +347,13 @@ export class BackupsService {
       // Lịch chạy định kỳ có thể khác trong bản sao lưu → đăng ký lại
       await this.scheduler.syncSchedules().catch((err: Error) => this.logger.warn(`Đồng bộ lịch tác vụ: ${err.message}`));
 
+      // Xoay vòng theo số bản cần giữ của tác vụ sao lưu (không bao giờ xoá bản an toàn vừa tạo)
+      const job = await this.backupJob().catch(() => undefined);
+      const keepRaw = Number((job?.payload as { keep?: unknown } | null)?.keep ?? 14);
+      rotateBackups(this.dir, Number.isFinite(keepRaw) && keepRaw >= 1 ? Math.floor(keepRaw) : 14, [safetyName]);
+
       const durationMs = Date.now() - started;
-      const message = `Đã phục hồi ${summary.tables} bảng · ${summary.rows.toLocaleString('vi-VN')} dòng từ ${path.basename(full)} (${(durationMs / 1000).toFixed(1)}s). Bản an toàn trước phục hồi: ${safety.fileName}`;
+      const message = `Đã phục hồi ${summary.tables} bảng · ${summary.rows.toLocaleString('vi-VN')} dòng từ ${path.basename(full)} (${(durationMs / 1000).toFixed(1)}s). Bản an toàn trước phục hồi: ${safetyName}`;
       this.logger.warn(message);
       await this.audit.log({
         userId: user.id,
@@ -305,13 +368,14 @@ export class BackupsService {
         ip: meta.ip,
         userAgent: meta.userAgent,
       });
-      return { message, durationMs, safetyBackup: safety.fileName, ...summary };
+      return { message, durationMs, safetyBackup: safetyName, ...summary };
     } finally {
       this.restoring = false;
+      await this.maintenance.end();
     }
   }
 
-  private async applyRestore(data: BackupFile) {
+  private async applyRestore(data: BackupFile, safetyPath: string) {
     return this.db.db.transaction(async (tx) => {
       const rowsOf = <T>(res: unknown): T[] => ((res as { rows?: T[] }).rows ?? []) as T[];
 
@@ -325,7 +389,19 @@ export class BackupsService {
       );
       const columns = new Map<string, ColumnInfo[]>();
       for (const c of colRows) columns.set(c.table_name, [...(columns.get(c.table_name) ?? []), c]);
-      const current = [...columns.keys()].filter((t) => /^[a-z_][a-z0-9_]*$/.test(t) && !NEVER_RESTORE.has(t));
+      const allTables = [...columns.keys()].filter((t) => /^[a-z_][a-z0-9_]*$/.test(t));
+      const current = allTables.filter((t) => !NEVER_RESTORE.has(t));
+
+      // Khoá độc quyền TOÀN BỘ bảng trước khi làm gì khác: chờ tối đa 10 giây cho các giao
+      // dịch đang chạy xong; sau đó không ai đọc/ghi chen vào được cho tới khi phục hồi xong.
+      await tx.execute(sql.raw(`set local lock_timeout = '${LOCK_WAIT_SECONDS}s'`));
+      await tx.execute(sql.raw(`lock table ${allTables.map((t) => `"${t}"`).join(', ')} in access exclusive mode`));
+      await tx.execute(sql.raw('set local lock_timeout = 0'));
+
+      // Bản an toàn chụp NGAY TRONG giao dịch đang giữ khoá → không lọt thay đổi nào
+      // giữa lúc sao lưu an toàn và lúc thay dữ liệu.
+      const safety = await writeBackup(tx as unknown as SqlExecutor, safetyPath);
+      this.logger.log(`Bản an toàn trước phục hồi: ${path.basename(safetyPath)} (${safety.totalRows} dòng)`);
 
       // Thứ tự chèn theo khoá ngoại: bảng cha trước, bảng con sau
       const fks = rowsOf<{ child: string; parent: string }>(

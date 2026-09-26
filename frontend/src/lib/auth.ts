@@ -42,8 +42,9 @@ export const useAuth = create<AuthState>((set, get) => ({
       const user = await apiFetch<CurrentUser>('/auth/me');
       set({ user });
       return user;
-    } catch {
-      tokenStore.clear();
+    } catch (err) {
+      const status = (err as { statusCode?: number }).statusCode;
+      if (status === 401 || status === 403) tokenStore.clear();
       set({ user: null });
       return null;
     }

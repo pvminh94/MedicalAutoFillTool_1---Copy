@@ -7,6 +7,12 @@
  */
 export const API_BASE = '/api';
 
+/** Sự kiện phát ra khi máy chủ đang bảo trì (phục hồi CSDL) — MaintenanceOverlay lắng nghe */
+export const MAINTENANCE_EVENT = 'qlbs:maintenance';
+export function notifyMaintenance(detail: unknown): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(MAINTENANCE_EVENT, { detail }));
+}
+
 const ACCESS_KEY = 'qlbs_access_token';
 const REFRESH_KEY = 'qlbs_refresh_token';
 
@@ -129,6 +135,7 @@ export async function apiFetch<T = unknown>(path: string, options: Options = {})
     if (contentType.includes('application/json')) {
       const payload = await response.json().catch(() => null);
       message = payload?.message ?? message;
+      if (response.status === 503 && payload?.code === 'MAINTENANCE') notifyMaintenance(payload.maintenance ?? { message });
       errors = Array.isArray(payload?.errors) ? payload.errors : undefined;
       if (Array.isArray(message)) {
         errors = message as unknown as string[];

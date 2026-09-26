@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as fs from 'fs';
 import { AppModule } from './app.module';
 import { config } from './config/env';
+import { MaintenanceService } from './infra/maintenance/maintenance.service';
 
 process.env.TZ = process.env.TZ ?? config.timezone;
 
@@ -33,6 +34,9 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept-Language'],
     exposedHeaders: ['Content-Disposition', 'X-Total-Count'],
   });
+
+  // Chế độ bảo trì (khi phục hồi CSDL): chặn yêu cầu trước khi vào route/xác thực
+  app.use(app.get(MaintenanceService).middleware());
 
   const bodyLimit = `${config.storage.uploadMaxMb}mb`;
   app.useBodyParser('json', { limit: bodyLimit });

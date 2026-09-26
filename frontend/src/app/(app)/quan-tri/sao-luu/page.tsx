@@ -174,7 +174,13 @@ export default function BackupsPage() {
         method: 'POST',
         body: { confirm },
       }),
-    onMutate: () => toast.loading('Đang phục hồi dữ liệu — vui lòng không đóng trang…', { id: 'restore' }),
+    onMutate: () => {
+      window.__qlbsRestoring = true;
+      toast.loading('Đang phục hồi dữ liệu — vui lòng không đóng trang…', { id: 'restore' });
+    },
+    onSettled: () => {
+      window.__qlbsRestoring = false;
+    },
     onSuccess: (res) => {
       toast.success(res.message, { id: 'restore', duration: 15000 });
       setRestoreName(null);
@@ -402,7 +408,10 @@ export default function BackupsPage() {
                   nếu cần.
                 </li>
                 <li>Nếu có lỗi giữa chừng, toàn bộ thao tác được huỷ và dữ liệu hiện tại giữ nguyên.</li>
-                <li>Người dùng khác nên tạm ngừng thao tác trong lúc phục hồi.</li>
+                <li>
+                  Trong lúc phục hồi, hệ thống tạm khoá với mọi người dùng khác (họ thấy thông báo “đang phục hồi” và
+                  trang tự tải lại khi xong). Nội dung họ đang nhập dở mà chưa lưu sẽ phải nhập lại.
+                </li>
               </ul>
             </div>
           </div>

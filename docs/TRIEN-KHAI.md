@@ -139,6 +139,15 @@ mặc định 23:30 hằng ngày, bấm ▶ để chạy ngay, xem kết quả �
   lỗi bất kỳ (kể cả dữ liệu vi phạm khoá ngoại) thì huỷ hết, dữ liệu hiện tại giữ nguyên.
   Phiên đăng nhập được giữ; bảng `_qlbs_migrations` không bị ghi đè.
 * Bản định dạng cũ (JSON không nén, chỉ 17 bảng danh mục) bị chặn phục hồi vì sẽ làm mất dữ liệu.
+* **Khi nhiều người đang dùng**: trong lúc phục hồi hệ thống vào *chế độ bảo trì* — mọi người dùng
+  khác thấy thông báo "Hệ thống đang phục hồi dữ liệu" (API trả 503 `MAINTENANCE`), không bị đăng
+  xuất, trang tự tải lại khi xong. Trình tự: bật bảo trì → chờ thao tác ghi dở xong (≤10 s) →
+  khoá toàn bộ bảng → ghi bản an toàn **trong cùng giao dịch** (không lọt thay đổi nào) → thay dữ liệu.
+* Nếu có truy vấn chạy lâu (báo cáo lớn) giữ bảng quá 10 s, phục hồi thử lại 1 lần rồi báo
+  "Hệ thống đang bận — dữ liệu chưa thay đổi"; gặp deadlock thì tự thử lại tối đa 3 lần.
+* Đã thử tải: 20 người dùng ảo liên tục ghi/đọc trong lúc phục hồi ~150.000 dòng (≈17 s) —
+  0 thao tác đã báo thành công bị mất, 0 lỗi ngoài 503 bảo trì.
+* Nên phục hồi vào lúc ít người dùng; thời gian tăng theo dung lượng dữ liệu.
 
 > Với CSDL rất lớn (hàng GB), `pg_dump`/`pg_restore` ở trên vẫn nhanh và chắc hơn — nên đặt cả hai.
 
